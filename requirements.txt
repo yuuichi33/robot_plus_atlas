@@ -1,0 +1,27 @@
+# ============================================================
+# 机器人任务控制系统 — Python 依赖
+# 在 Atlas 200I DK A2 (Ubuntu) 上执行:
+#   pip3 install -r requirements.txt
+# ============================================================
+
+# 串口通信（与 Atlas / 机器人底盘通信）
+pyserial>=3.5
+
+# 视觉处理
+opencv-python>=4.8.0
+numpy>=1.24.0
+
+# OCR 文字识别（ARM64 aarch64 推荐 EasyOCR + Tesseract，PaddlePaddle 有 segfault 风险）
+# 方案 A：EasyOCR（ARM64 首选，稳定）
+easyocr>=1.7.0
+
+# 方案 B：Tesseract（最轻量，ARM64 上速度最快）
+# 注意：需要先安装系统包: sudo apt install tesseract-ocr tesseract-ocr-chi-sim -y
+# pytesseract>=0.3.10
+
+# 方案 C：PaddleOCR（仅 x86_64 推荐，ARM64 上可能崩溃）
+# paddlepaddle>=2.6.0
+# paddleocr>=2.7.0
+
+# 二维码/条形码扫描（备用方案，OpenCV 自带 QR 检测优先）
+# pyzbar>=0.1.9            # 需要系统安装 libzbar0
