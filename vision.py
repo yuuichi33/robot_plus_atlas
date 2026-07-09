@@ -183,7 +183,7 @@ class VisionPerception:
         self._ocr_skip_interval = 5
         self._ocr_max_width = 200  # ROI 缩放到此宽度再送 OCR，ARM 上提速
         self._paper_stable_count = 0
-        self._paper_stable_threshold = 2
+        self._paper_stable_threshold = 1  # 首次识别到就立即返回，避免绕行时丢帧
 
     # ---- 摄像头控制 ----
 
