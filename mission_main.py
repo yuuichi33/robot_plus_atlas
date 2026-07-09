@@ -253,78 +253,92 @@ class MissionController:
 
     def orbit_and_scan(self) -> TaskResult:
         """
-        找到四方体后，缓慢绕其移动，始终保持四方体在视野中央。
-        同时检测文字区域，一旦发现立即停止，静止 OCR 确认。
+        绕四方体移动，保持其在视野中央。丢失时自动原地搜索找回。
+        同时检测文字，一旦发现立即停止，静止 OCR 确认。
         """
         self.log("[ORBIT] orbiting cuboid, scanning for text...")
         step = 0
         max_steps = self.max_scan_steps
 
         while step < max_steps:
-            # 检查四方体位置，调整方向使其始终居中
+            # ---- 检测四方体 ----
             block = self.perception.detect_block()
-            if block.found:
-                error_x = block.center_x - 320
-                if step % 5 == 0:
-                    self.log(
-                        f"  orbit {step:02d}: block area={block.area:.0f}, "
-                        f"err_x={error_x}, dist={block.distance_level}"
-                    )
-                # 四方体偏右 → 右转拉回；偏左 → 左转拉回
-                if abs(error_x) > 60:
-                    if error_x > 0:
-                        self.drive_rotate_right(turn=min(50, abs(error_x) // 2), duration_ms=150)
-                    else:
-                        self.drive_rotate_left(turn=min(50, abs(error_x) // 2), duration_ms=150)
-                    time.sleep(0.15)
-            else:
-                if step % 5 == 0:
-                    self.log(f"  orbit {step:02d}: block lost, keep orbiting...")
 
-            # 扫描文字（内部含跳帧，OCR 不会每帧都跑，但白色检测每帧都做）
-            result = self.perception.read_task_text()
-
-            if result.found and result.label:
-                # ====== 看到文字了！立即停 ======
+            if not block.found:
+                # 丢了：原地慢转搜索
                 self.drive_stop()
-                self.log(f"[TEXT] spotted: \"{result.label[:30]}\", stopping to confirm...")
-                time.sleep(0.5)
+                self.log(f"  orbit {step:02d}: block lost, re-searching...")
+                search_substep = 0
+                while search_substep < 60:  # 最多转 60 步找回
+                    block = self.perception.detect_block()
+                    if block.found:
+                        self.log(f"  [FOUND] block recovered, area={block.area:.0f}")
+                        break
+                    self._show_frame()
+                    self.drive_rotate_left(turn=45, duration_ms=250)
+                    time.sleep(0.1)
+                    search_substep += 1
+                    step += 1
+                if not block.found:
+                    self.log("[ORBIT] block lost permanently, abort")
+                    return TaskResult(valid=False)
+                continue
 
-                # ====== 静止状态下反复 OCR 确认 ======
-                for retry in range(120):
-                    result2 = self.perception.read_task_text()
-                    if result2.found and result2.label:
-                        if _parse_task_text is not None:
-                            valid, pos, att = _parse_task_text(result2.label)
-                        else:
-                            valid = True
-                            import re
-                            pm = re.search(r"位置\s*([12])", result2.label)
-                            pos = int(pm.group(1)) if pm else 1
-                            att = ("chop" if "劈" in result2.label or "砍" in result2.label
-                                   or "chop" in result2.label.lower() else "stab")
+            # ---- 四方体在视野中，保持居中 ----
+            error_x = block.center_x - 320
+            if step % 5 == 0:
+                self.log(
+                    f"  orbit {step:02d}: block area={block.area:.0f}, "
+                    f"err_x={error_x}, dist={block.distance_level}"
+                )
 
-                        self.log(
-                            f"  confirm {retry}: valid={valid}, "
-                            f"text=\"{result2.label[:30]}\", pos={pos}, att={att}"
-                        )
-                        if valid:
-                            self.log(f"[TASK] confirmed: position={pos}, attack={att}")
-                            return TaskResult(valid=True, position=pos, attack=att)
-                    else:
-                        if retry % 10 == 0:
-                            self.log(f"  confirm {retry}: waiting for OCR...")
+            # 偏差大 → 优先旋转对准
+            if abs(error_x) > 50:
+                turn_amount = min(60, abs(error_x) // 2)
+                if error_x > 0:
+                    self.drive_rotate_right(turn=turn_amount, duration_ms=200)
+                else:
+                    self.drive_rotate_left(turn=turn_amount, duration_ms=200)
+                time.sleep(0.15)
+            else:
+                # 居中 → 小步绕行 + 扫描文字
+                self._show_frame()
+                self.drive_forward(speed=6, duration_ms=300)
+                time.sleep(0.2)
+                self.drive_rotate_left(turn=15, duration_ms=300)
+                time.sleep(0.2)
+
+                # 扫描文字
+                result = self.perception.read_task_text()
+                if result.found and result.label:
+                    self.drive_stop()
+                    self.log(f"[TEXT] spotted: \"{result.label[:30]}\", stopping to confirm...")
                     time.sleep(0.5)
+                    for retry in range(120):
+                        result2 = self.perception.read_task_text()
+                        if result2.found and result2.label:
+                            if _parse_task_text is not None:
+                                valid, pos, att = _parse_task_text(result2.label)
+                            else:
+                                valid = True
+                                import re
+                                pm = re.search(r"位置\s*([12])", result2.label)
+                                pos = int(pm.group(1)) if pm else 1
+                                att = ("chop" if "劈" in result2.label or "砍" in result2.label
+                                       or "chop" in result2.label.lower() else "stab")
+                            self.log(
+                                f"  confirm {retry}: valid={valid}, "
+                                f"text=\"{result2.label[:30]}\", pos={pos}, att={att}"
+                            )
+                            if valid:
+                                self.log(f"[TASK] confirmed: position={pos}, attack={att}")
+                                return TaskResult(valid=True, position=pos, attack=att)
+                        else:
+                            if retry % 10 == 0:
+                                self.log(f"  confirm {retry}: waiting for OCR...")
+                        time.sleep(0.5)
+                    self.log("  confirm timeout, resume orbiting...")
 
-                # 确认超时，恢复绕行继续找
-                self.log("  confirm timeout, resume orbiting...")
-
-            # 缓慢绕行：微小前进 + 微小旋转
-            self._show_frame()
-            self.drive_forward(speed=6, duration_ms=400)
-            time.sleep(0.25)
-            self.drive_rotate_left(turn=20, duration_ms=400)
-            time.sleep(0.25)
             step += 1
 
         self.drive_stop()

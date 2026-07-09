@@ -188,9 +188,18 @@ class VisionPerception:
     # ---- 摄像头控制 ----
 
     def open(self) -> None:
-        """打开摄像头。"""
-        self.cap = cv2.VideoCapture(self.camera_id)
-        if not self.cap.isOpened():
+        """打开摄像头，启动时可能需等待设备初始化，最多重试 10 次。"""
+        import time as _time
+        for attempt in range(10):
+            self.cap = cv2.VideoCapture(self.camera_id)
+            if self.cap.isOpened():
+                break
+            self.cap.release()
+            self.cap = None
+            if attempt < 9:
+                print(f"[vision] camera not ready, retry {attempt+1}/10...")
+                _time.sleep(2)
+        if self.cap is None or not self.cap.isOpened():
             raise RuntimeError(
                 f"无法打开摄像头 /dev/video{self.camera_id}，"
                 f"请检查摄像头连接和权限。"
