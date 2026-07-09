@@ -336,6 +336,11 @@ class VisionPerception:
                 if touches_border:
                     continue
 
+                # 排除黑色区域（墙壁、阴影），L 通道均值 < 35 视为黑色
+                roi_l = channel_l[y:y + h, x:x + w]
+                if roi_l.size > 0 and np.mean(roi_l) < 35:
+                    continue
+
                 aspect = h / float(w)
                 if not (self.cuboid_min_aspect <= aspect <= self.cuboid_max_aspect):
                     continue

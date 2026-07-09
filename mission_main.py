@@ -94,11 +94,12 @@ class MissionController:
     def __init__(
         self,
         robot: RobotController,
-        perception: Any,  # VisionPerception | PerceptionStub（鸭子类型）
+        perception: Any,
         enable_chassis: bool = False,
         enable_qr_check: bool = True,
         max_search_steps: int = 60,
         max_scan_steps: int = 40,
+        show_display: bool = False,
     ):
         self.robot = robot
         self.perception = perception
@@ -106,6 +107,7 @@ class MissionController:
         self.enable_qr_check = enable_qr_check
         self.max_search_steps = max_search_steps
         self.max_scan_steps = max_scan_steps
+        self.show_display = show_display
         self.state = MissionState.INIT
 
     # ------------------------------------------------------------------
@@ -115,6 +117,11 @@ class MissionController:
     def log(self, msg: str) -> None:
         timestamp = time.strftime("%H:%M:%S")
         print(f"[{timestamp}][{self.state.value}] {msg}", flush=True)
+
+    def _show_frame(self) -> None:
+        """如果启用了显示，展示当前摄像头画面。"""
+        if self.show_display and hasattr(self.perception, 'show_debug'):
+            self.perception.show_debug(self.state.value)
 
     def drive_stop(self) -> None:
         self.robot.stop()
@@ -213,11 +220,18 @@ class MissionController:
                     f"  step {step:04d}: FOUND area={result.area:.0f} "
                     f"cx={result.center_x} err={error_x} score={result.score:.2f}"
                 )
-                # 居中就确认（放宽到 80px）
-                if abs(error_x) < 80:
-                    self.log(f"[FOUND] cuboid centered, area={result.area:.0f}")
+                # 居中就确认（底盘能动时 80px，不能动时放宽到 200px）
+                center_tolerance = 200 if not self.enable_chassis else 80
+                if abs(error_x) < center_tolerance:
+                    self._show_frame()
+                    self.log(f"[FOUND] cuboid accepted, area={result.area:.0f}")
                     return True
-                # 没居中：小角度旋转对准
+                # 没居中且底盘能动：旋转对准
+                if not self.enable_chassis:
+                    self.log(f"  chassis disabled, cannot center, retrying...")
+                    time.sleep(0.3)
+                    step += 1
+                    continue
                 if error_x > 0:
                     self.drive_rotate_right(turn=min(60, abs(error_x) // 2), duration_ms=200)
                 else:
@@ -228,6 +242,7 @@ class MissionController:
 
             if step % 3 == 0:
                 self.log(f"  step {step:04d}: not found, searching...")
+            self._show_frame()
             self.drive_rotate_left(turn=60, duration_ms=300)
             time.sleep(0.1)
             step += 1
@@ -305,6 +320,7 @@ class MissionController:
                 self.log("  confirm timeout, resume orbiting...")
 
             # 缓慢绕行：微小前进 + 微小旋转
+            self._show_frame()
             self.drive_forward(speed=6, duration_ms=400)
             time.sleep(0.25)
             self.drive_rotate_left(turn=20, duration_ms=400)
@@ -459,6 +475,9 @@ def main() -> None:
     parser.add_argument("--dry-run", action="store_true",
                         help="完全模拟模式（不连接任何硬件）")
 
+    parser.add_argument("--display", action="store_true",
+                        help="显示摄像头实时画面（需要图形界面）")
+
     args = parser.parse_args()
 
     # ------- 创建机器人控制器 -------
@@ -502,6 +521,7 @@ def main() -> None:
                 perception=perception,
                 enable_chassis=args.enable_chassis,
                 enable_qr_check=args.enable_qr and not args.no_qr,
+                show_display=args.display,
             )
             mission.run()
     finally:
