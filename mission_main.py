@@ -202,23 +202,34 @@ class MissionController:
     # ------------------------------------------------------------------
 
     def search_block(self) -> bool:
-        self.log("[SEARCH] searching for colored block...")
+        self.log("[SEARCH] searching for cuboid...")
         step = 0
         while True:
             result = self.perception.detect_block()
 
-            self.log(
-                f"  step {step:04d}: found={result.found}, "
-                f"area={result.area}, dist={result.distance_level}"
-                + (f", label={result.label}" if result.label else "")
-            )
-
             if result.found:
-                self.log(f"[FOUND] block detected: label={result.label}, area={result.area}")
-                return True
+                error_x = result.center_x - 320  # 640/2
+                self.log(
+                    f"  step {step:04d}: found, area={result.area:.0f}, "
+                    f"center_x={result.center_x}, err_x={error_x}"
+                )
+                # 必须居中才确认找到
+                if abs(error_x) < 50:
+                    self.log(f"[FOUND] cuboid centered, area={result.area:.0f}")
+                    return True
+                # 没居中：小角度旋转对准
+                if error_x > 0:
+                    self.drive_rotate_right(turn=min(60, abs(error_x)), duration_ms=150)
+                else:
+                    self.drive_rotate_left(turn=min(60, abs(error_x)), duration_ms=150)
+                time.sleep(0.2)
+                step += 1
+                continue
 
-            self.drive_rotate_left(turn=90, duration_ms=400)
-            time.sleep(0.15)
+            if step % 10 == 0:
+                self.log(f"  step {step:04d}: not found, searching...")
+            self.drive_rotate_left(turn=60, duration_ms=300)
+            time.sleep(0.1)
             step += 1
 
     # ------------------------------------------------------------------
@@ -227,25 +238,33 @@ class MissionController:
 
     def orbit_and_scan(self) -> TaskResult:
         """
-        找到四方体后，缓慢绕其移动，同时持续检测文字区域。
-        一旦发现白色文字区域，立即停止移动，
-        然后在静止状态下反复 OCR 直到识别成功。
+        找到四方体后，缓慢绕其移动，始终保持四方体在视野中央。
+        同时检测文字区域，一旦发现立即停止，静止 OCR 确认。
         """
         self.log("[ORBIT] orbiting cuboid, scanning for text...")
         step = 0
         max_steps = self.max_scan_steps
 
         while step < max_steps:
-            # 检查四方体是否还在视野中
+            # 检查四方体位置，调整方向使其始终居中
             block = self.perception.detect_block()
             if block.found:
+                error_x = block.center_x - 320
                 if step % 5 == 0:
                     self.log(
                         f"  orbit {step:02d}: block area={block.area:.0f}, "
-                        f"dist={block.distance_level}"
+                        f"err_x={error_x}, dist={block.distance_level}"
                     )
+                # 四方体偏右 → 右转拉回；偏左 → 左转拉回
+                if abs(error_x) > 60:
+                    if error_x > 0:
+                        self.drive_rotate_right(turn=min(50, abs(error_x) // 2), duration_ms=150)
+                    else:
+                        self.drive_rotate_left(turn=min(50, abs(error_x) // 2), duration_ms=150)
+                    time.sleep(0.15)
             else:
-                self.log(f"  orbit {step:02d}: block lost, keep orbiting...")
+                if step % 5 == 0:
+                    self.log(f"  orbit {step:02d}: block lost, keep orbiting...")
 
             # 扫描文字（内部含跳帧，OCR 不会每帧都跑，但白色检测每帧都做）
             result = self.perception.read_task_text()
@@ -285,11 +304,11 @@ class MissionController:
                 # 确认超时，恢复绕行继续找
                 self.log("  confirm timeout, resume orbiting...")
 
-            # 缓慢绕行：很小步前进 + 很小角度旋转
-            self.drive_forward(speed=8, duration_ms=300)
-            time.sleep(0.2)
-            self.drive_rotate_left(turn=25, duration_ms=300)
-            time.sleep(0.2)
+            # 缓慢绕行：微小前进 + 微小旋转
+            self.drive_forward(speed=6, duration_ms=400)
+            time.sleep(0.25)
+            self.drive_rotate_left(turn=20, duration_ms=400)
+            time.sleep(0.25)
             step += 1
 
         self.drive_stop()
