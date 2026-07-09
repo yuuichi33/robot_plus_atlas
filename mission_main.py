@@ -22,10 +22,8 @@ except ImportError:
 class MissionState(Enum):
     INIT = "INIT"
     SEARCH_BLOCK = "SEARCH_BLOCK"
-    APPROACH_BLOCK = "APPROACH_BLOCK"
-    CIRCLE_SCAN_TEXT = "CIRCLE_SCAN_TEXT"
-    NAVIGATE_TO_GONG = "NAVIGATE_TO_GONG"
-    SCAN_QR = "SCAN_QR"
+    ORBIT_AND_SCAN = "ORBIT_AND_SCAN"
+    SEARCH_QR = "SEARCH_QR"
     EXECUTE_TASK = "EXECUTE_TASK"
     FINISHED = "FINISHED"
     ERROR = "ERROR"
@@ -158,40 +156,33 @@ class MissionController:
             self.robot.stop()
             self.log("[OK] Atlas communication OK")
 
-            # 阶段 1：转圈搜索方块
+            # 阶段 1：转圈搜索四方体
             self.state = MissionState.SEARCH_BLOCK
             found = self.search_block()
             if not found:
-                raise RuntimeError("未找到方块，任务终止")
+                raise RuntimeError("未找到四方体，任务终止")
 
-            # 阶段 2：靠近方块
-            self.state = MissionState.APPROACH_BLOCK
-            self.approach_block()
-
-            # 阶段 3：绕柱子扫描 A4 纸文字 -> 识别到就做动作
-            self.state = MissionState.CIRCLE_SCAN_TEXT
-            task = self.circle_and_scan_text()
+            # 阶段 2：缓慢绕四方体移动 + 扫描文字，发现文字立即停
+            self.state = MissionState.ORBIT_AND_SCAN
+            task = self.orbit_and_scan()
             if not task.valid:
-                raise RuntimeError("未识别到 A4 纸任务文字，任务终止")
+                raise RuntimeError("未识别到任务文字，任务终止")
             self.log(f"[TASK] recognized: position={task.position}, attack={task.attack}")
 
             self.state = MissionState.EXECUTE_TASK
             self.execute_task(task)
             self.log("[ACTION] first action done (text-based)")
 
-            # 阶段 4：导航到锣 + 扫描二维码 -> 匹配后做第二次动作
+            # 阶段 3：转圈搜索 QR 码，找到后靠近并验证 -> 做第二次动作
             if self.enable_qr_check:
-                self.state = MissionState.NAVIGATE_TO_GONG
-                self.navigate_to_gong(task.position)
-
-                self.state = MissionState.SCAN_QR
-                qr_ok = self.scan_qr_and_verify(task.position)
+                self.state = MissionState.SEARCH_QR
+                qr_ok = self.search_and_approach_qr(task.position)
                 if qr_ok:
                     self.state = MissionState.EXECUTE_TASK
                     self.execute_task(task)
                     self.log("[ACTION] second action done (QR-based)")
                 else:
-                    self.log("[WARN] QR verification failed, skip second action")
+                    self.log("[WARN] QR search failed, skip second action")
 
             self.state = MissionState.FINISHED
             self.robot.stop()
@@ -231,128 +222,152 @@ class MissionController:
             step += 1
 
     # ------------------------------------------------------------------
-    # 阶段 2：靠近方块
+    # 阶段 2：缓慢绕四方体移动 + 扫描文字
     # ------------------------------------------------------------------
 
-    def approach_block(self) -> None:
-        self.log("[MOVE] approaching block...")
-        # 分步靠近，每一步后检查距离
-        for i in range(3):
-            result = self.perception.detect_block()
-            if result.found and result.distance_level == "near":
-                self.log(f"  已足够接近（area={result.area}），停止前进")
-                break
-            self.log(f"  第{i+1}步前进...")
-            self.drive_forward(speed=15, duration_ms=400)
-            time.sleep(0.2)
-
-        self.drive_stop()
-        time.sleep(0.3)
-
-    # ------------------------------------------------------------------
-    # 阶段 3：绕柱子扫描 A4 纸
-    # ------------------------------------------------------------------
-
-    def circle_and_scan_text(self) -> TaskResult:
-        self.log("[SCAN] circling to scan A4 paper...")
+    def orbit_and_scan(self) -> TaskResult:
+        """
+        找到四方体后，缓慢绕其移动，同时持续检测文字区域。
+        一旦发现白色文字区域，立即停止移动，
+        然后在静止状态下反复 OCR 直到识别成功。
+        """
+        self.log("[ORBIT] orbiting cuboid, scanning for text...")
         step = 0
-        while True:
+        max_steps = self.max_scan_steps
+
+        while step < max_steps:
+            # 检查四方体是否还在视野中
+            block = self.perception.detect_block()
+            if block.found:
+                if step % 5 == 0:
+                    self.log(
+                        f"  orbit {step:02d}: block area={block.area:.0f}, "
+                        f"dist={block.distance_level}"
+                    )
+            else:
+                self.log(f"  orbit {step:02d}: block lost, keep orbiting...")
+
+            # 扫描文字（内部含跳帧，OCR 不会每帧都跑，但白色检测每帧都做）
             result = self.perception.read_task_text()
 
             if result.found and result.label:
-                # 尝试解析文字 → TaskResult
-                if _parse_task_text is not None:
-                    valid, pos, att = _parse_task_text(result.label)
-                else:
-                    # 桩模块已预先解析好（label 为 "位置X chop/stab"）
-                    valid = True
-                    # 简单解析
-                    import re
-                    pm = re.search(r"位置\s*([12])", result.label)
-                    pos = int(pm.group(1)) if pm else 1
-                    att = "chop" if "劈" in result.label or "砍" in result.label or "chop" in result.label.lower() else "stab"
+                # ====== 看到文字了！立即停 ======
+                self.drive_stop()
+                self.log(f"[TEXT] spotted: \"{result.label[:30]}\", stopping to confirm...")
+                time.sleep(0.5)
 
-                self.log(
-                    f"  scan step {step:02d}: found={valid}, "
-                    f"text=\"{result.label}\", pos={pos}, att={att}"
-                )
+                # ====== 静止状态下反复 OCR 确认 ======
+                for retry in range(120):
+                    result2 = self.perception.read_task_text()
+                    if result2.found and result2.label:
+                        if _parse_task_text is not None:
+                            valid, pos, att = _parse_task_text(result2.label)
+                        else:
+                            valid = True
+                            import re
+                            pm = re.search(r"位置\s*([12])", result2.label)
+                            pos = int(pm.group(1)) if pm else 1
+                            att = ("chop" if "劈" in result2.label or "砍" in result2.label
+                                   or "chop" in result2.label.lower() else "stab")
 
-                if valid:
-                    self.log(f"[TASK] text recognized: position={pos}, attack={att}")
-                    return TaskResult(valid=True, position=pos, attack=att)
-            else:
-                self.log(f"  scan step {step:02d}: 未检测到文字")
+                        self.log(
+                            f"  confirm {retry}: valid={valid}, "
+                            f"text=\"{result2.label[:30]}\", pos={pos}, att={att}"
+                        )
+                        if valid:
+                            self.log(f"[TASK] confirmed: position={pos}, attack={att}")
+                            return TaskResult(valid=True, position=pos, attack=att)
+                    else:
+                        if retry % 10 == 0:
+                            self.log(f"  confirm {retry}: waiting for OCR...")
+                    time.sleep(0.5)
 
-            # 绕柱子旋转扫描
-            self.drive_rotate_left(turn=45, duration_ms=300)
-            time.sleep(0.15)
+                # 确认超时，恢复绕行继续找
+                self.log("  confirm timeout, resume orbiting...")
+
+            # 缓慢绕行：很小步前进 + 很小角度旋转
+            self.drive_forward(speed=8, duration_ms=300)
+            time.sleep(0.2)
+            self.drive_rotate_left(turn=25, duration_ms=300)
+            time.sleep(0.2)
             step += 1
 
-    # ------------------------------------------------------------------
-    # 阶段 4a：导航到锣的位置
-    # ------------------------------------------------------------------
-
-    def navigate_to_gong(self, target_position: int) -> None:
-        """
-        根据任务文字指示的位置（1 或 2），导航到对应的锣。
-        此处实现为简单的定向移动，实际可能需要更复杂的路径规划。
-        """
-        self.log(f"[NAV] navigating to gong at position {target_position}...")
-
-        # 位置 1 和位置 2 的锣在不同方向
-        # 这里假设：位置1在左前方，位置2在右前方
-        # 实际使用时需要根据场地调整
-        if target_position == 1:
-            self.log("  向左转，前往位置 1...")
-            self.drive_rotate_left(turn=90, duration_ms=600)
-        else:
-            self.log("  向右转，前往位置 2...")
-            self.drive_rotate_right(turn=90, duration_ms=600)
-
-        time.sleep(0.3)
-
-        # 前进到锣前
-        for i in range(5):
-            self.log(f"  第{i+1}步前进...")
-            self.drive_forward(speed=15, duration_ms=400)
-            time.sleep(0.2)
-
         self.drive_stop()
-        time.sleep(0.3)
+        self.log("[ORBIT] max steps reached, no text found")
+        return TaskResult(valid=False)
 
     # ------------------------------------------------------------------
-    # 阶段 4b：扫描二维码验证位置
+    # 阶段 3：转圈搜索 QR 码 → 对准 → 靠近 → 验证
     # ------------------------------------------------------------------
 
-    def scan_qr_and_verify(self, expected_position: int) -> bool:
+    def search_and_approach_qr(self, expected_position: int) -> bool:
         """
-        扫描锣上的二维码，验证是否到达正确位置。
-        二维码格式：POS=1 或 POS=2
+        原地慢转搜索 QR 码。找到后：
+        1. 旋转使 QR 居中
+        2. 前进靠近
+        3. 靠近后重新扫描验证位置是否匹配
         """
-        self.log(f"[QR] scanning QR code, expected POS={expected_position}...")
-        attempt = 0
-        while True:
+        self.log(f"[QR] searching for QR code, expected POS={expected_position}...")
+        search_step = 0
+        max_search = 120  # 最多转 120 步
+
+        # ---------- 第一轮：转圈找 QR ----------
+        while search_step < max_search:
             result = self.perception.detect_qr()
 
             if result.found and result.label:
-                self.log(f"  QR 内容: \"{result.label}\"")
+                self.log(f"  [FOUND] QR: \"{result.label}\" at x={result.center_x}")
+                self.drive_stop()
+                time.sleep(0.2)
 
-                # 解析 POS=1 / POS=2
-                pos_value = self._parse_qr_position(result.label)
-                if pos_value == expected_position:
-                    self.log(f"[OK] QR verified: POS={pos_value}")
-                    return True
-                elif pos_value in (1, 2):
-                    self.log(f"[WARN] QR POS={pos_value}, expected POS={expected_position}, mismatch!")
-                    # 仍然返回 True 继续执行（可根据需求改为 False）
-                    return True
-                else:
-                    self.log(f"  无法解析 POS 值，重试...")
-            else:
-                self.log(f"  attempt {attempt:02d}: 未检测到二维码")
+                # 靠近 QR 直到足够近
+                self.log("  [QR] approaching QR code...")
+                for _ in range(8):  # 最多靠近 8 步
+                    # 居中对准
+                    error_x = result.center_x - 320  # 640/2
+                    if abs(error_x) > 50:
+                        if error_x > 0:
+                            self.drive_rotate_right(turn=min(60, abs(error_x) // 2), duration_ms=200)
+                        else:
+                            self.drive_rotate_left(turn=min(60, abs(error_x) // 2), duration_ms=200)
+                        time.sleep(0.2)
 
-            time.sleep(0.3)
-            attempt += 1
+                    # 前进一小步
+                    self.drive_forward(speed=12, duration_ms=350)
+                    time.sleep(0.2)
+
+                    # 重新检测 QR
+                    result = self.perception.detect_qr()
+                    if not result.found:
+                        self.log("  [QR] lost during approach, re-searching...")
+                        break
+
+                self.drive_stop()
+                time.sleep(0.3)
+
+                # 靠近后做最终验证
+                if result.found and result.label:
+                    pos_value = self._parse_qr_position(result.label)
+                    if pos_value == expected_position:
+                        self.log(f"[OK] QR verified: POS={pos_value}, matched!")
+                        return True
+                    elif pos_value in (1, 2):
+                        self.log(f"[WARN] QR POS={pos_value}, expected {expected_position}, but proceed anyway")
+                        return True
+                    else:
+                        self.log(f"  QR parse failed: \"{result.label}\"")
+                continue  # 验证失败，继续转圈找
+
+            if search_step % 10 == 0:
+                self.log(f"  qr search {search_step:03d}: not found")
+
+            self.drive_rotate_left(turn=45, duration_ms=250)
+            time.sleep(0.1)
+            search_step += 1
+
+        self.drive_stop()
+        self.log("[QR] max search steps reached, QR not found")
+        return False
 
     @staticmethod
     def _parse_qr_position(qr_text: str) -> int:
@@ -368,7 +383,7 @@ class MissionController:
         return 0
 
     # ------------------------------------------------------------------
-    # 阶段 5：执行动作（劈砍/刺击，动作自带语音）
+    # 阶段 4：执行动作（劈砍/刺击，动作自带语音）
     # ------------------------------------------------------------------
 
     def execute_task(self, task: TaskResult) -> None:
@@ -425,12 +440,6 @@ def main() -> None:
     parser.add_argument("--dry-run", action="store_true",
                         help="完全模拟模式（不连接任何硬件）")
 
-    # ---- 调试参数 ----
-    parser.add_argument("--save-debug-frames", action="store_true",
-                        help="保存视觉调试帧到磁盘")
-    parser.add_argument("--debug-dir", default="/tmp/robot_debug",
-                        help="调试帧保存目录")
-
     args = parser.parse_args()
 
     # ------- 创建机器人控制器 -------
@@ -455,7 +464,6 @@ def main() -> None:
         else:
             vision_obj = VisionPerception(
                 camera_id=args.camera,
-                debug_dir=args.debug_dir if args.save_debug_frames else "",
             )
             vision_obj.open()
             perception = vision_obj

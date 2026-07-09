@@ -158,7 +158,6 @@ class VisionPerception:
         cuboid_min_bottom_ratio: float = 0.62,
         block_middle_area: float = 10000.0,
         block_near_area: float = 30000.0,
-        debug_dir: str = "",
     ):
         self.camera_id = camera_id
         self.frame_width = frame_width
@@ -173,17 +172,16 @@ class VisionPerception:
         self.cuboid_min_bottom_ratio = cuboid_min_bottom_ratio
         self.block_middle_area = block_middle_area
         self.block_near_area = block_near_area
-        self.debug_dir = debug_dir
 
         self.cap: Optional[cv2.VideoCapture] = None
         self._last_frame: Optional[np.ndarray] = None
         self._last_annotated_frame: Optional[np.ndarray] = None
         self._last_block_candidates = []
-        self._debug_frame_count = 0
         self._display_window_name = "Robot Mission Vision"
 
         self._ocr_frame_counter = 0
-        self._ocr_skip_interval = 3
+        self._ocr_skip_interval = 5
+        self._ocr_max_width = 200  # ROI 缩放到此宽度再送 OCR，ARM 上提速
         self._paper_stable_count = 0
         self._paper_stable_threshold = 2
 
@@ -311,7 +309,6 @@ class VisionPerception:
         )
 
         # 调试图显示两类边缘的并集，但候选分别提取，避免背景边缘与目标粘连。
-        debug_edges = cv2.bitwise_or(l_edges, chroma_edges)
         candidates = []
 
         def collect_candidates(edge_map: np.ndarray, source: str) -> None:
@@ -462,8 +459,6 @@ class VisionPerception:
         self._last_annotated_frame = annotated
 
         if not candidates:
-            if self.debug_dir and self._debug_frame_count < 20:
-                self._save_debug_pair(frame, debug_edges, "cuboid_none")
             return VisionResult(found=False)
 
         best = candidates[0]
@@ -496,7 +491,7 @@ class VisionPerception:
 
     def show_debug(self, state: str, result: Optional[VisionResult] = None) -> bool:
         """显示自动任务实时画面。返回 False 表示用户按下 q。"""
-        is_block_state = any(key in state for key in ("SEARCH_BLOCK", "ALIGN_BLOCK", "APPROACH_BLOCK"))
+        is_block_state = any(key in state for key in ("SEARCH_BLOCK", "ALIGN_BLOCK", "APPROACH_BLOCK", "ORBIT_AND_SCAN"))
         base = (self._last_annotated_frame if is_block_state and self._last_annotated_frame is not None
                 else self._last_frame)
         if base is None:
@@ -547,12 +542,10 @@ class VisionPerception:
         # 找面积最大的白色四边形区域
         best_cnt = None
         best_area = 0
-        total_white_blobs = 0
         for cnt in contours:
             area = cv2.contourArea(cnt)
             if area < 1500:  # 放宽最小面积
                 continue
-            total_white_blobs += 1
 
             # 近似矩形检查
             peri = cv2.arcLength(cnt, True)
@@ -566,9 +559,6 @@ class VisionPerception:
 
         if best_cnt is None:
             self._paper_stable_count = 0
-            if self._debug_frame_count < 10 and self.debug_dir:
-                self._save_debug_pair(frame, white_mask, "paper_none")
-                print(f"[vision] white blobs found: {total_white_blobs}, best_area: {best_area}")
             return VisionResult(found=False)
 
         # 2) 提取白色区域并做 OCR（只做一次，避免多次 OCR 卡顿）
@@ -596,6 +586,12 @@ class VisionPerception:
         crop_l = rw // 8
         crop_r = rw - rw // 8
         roi_cropped = roi[crop_t:crop_b, crop_l:crop_r] if rh > 40 and rw > 40 else roi
+
+        # 缩小 ROI 加速 OCR（ARM 上 EasyOCR 对大图很慢）
+        rh2, rw2 = roi_cropped.shape[:2]
+        if rw2 > self._ocr_max_width:
+            scale = self._ocr_max_width / rw2
+            roi_cropped = cv2.resize(roi_cropped, (self._ocr_max_width, int(rh2 * scale)))
 
         raw_text = _ocr_text(roi_cropped)
 
@@ -650,30 +646,6 @@ class VisionPerception:
             )
 
         return VisionResult(found=False)
-
-    # ---- 调试辅助 ----
-
-    def save_debug_frame(self, filepath: str = "debug_frame.jpg") -> None:
-        """保存当前帧用于调试。"""
-        if self._last_frame is not None:
-            cv2.imwrite(filepath, self._last_frame)
-            print(f"[vision] debug frame saved: {filepath}")
-        else:
-            print("[vision] no frame available")
-
-    def _save_debug_pair(
-        self, frame: np.ndarray, mask: np.ndarray, tag: str, roi: Optional[np.ndarray] = None
-    ) -> None:
-        """保存调试帧：原图 + 白色掩码 + 可选的 ROI 区域。"""
-        import os
-        os.makedirs(self.debug_dir, exist_ok=True)
-        idx = self._debug_frame_count
-        self._debug_frame_count += 1
-        cv2.imwrite(os.path.join(self.debug_dir, f"{tag}_{idx}_frame.jpg"), frame)
-        cv2.imwrite(os.path.join(self.debug_dir, f"{tag}_{idx}_mask.jpg"), mask)
-        if roi is not None and roi.size > 0:
-            cv2.imwrite(os.path.join(self.debug_dir, f"{tag}_{idx}_roi.jpg"), roi)
-        print(f"[vision] debug frame saved: {self.debug_dir}/{tag}_{idx}_*.jpg")
 
 
 # ---------------------------------------------------------------------------
@@ -770,10 +742,9 @@ if __name__ == "__main__":
     parser.add_argument("--camera", type=int, default=0, help="摄像头设备 ID")
     parser.add_argument("--mode", choices=["block", "text", "qr"], default="block")
     parser.add_argument("--no-display", action="store_true", help="不弹窗显示画面（Atlas 无头模式）")
-    parser.add_argument("--debug-dir", default=".", help="调试帧保存目录")
     args = parser.parse_args()
 
-    with VisionPerception(camera_id=args.camera, debug_dir=args.debug_dir) as vp:
+    with VisionPerception(camera_id=args.camera) as vp:
         print(f"Mode: {args.mode}, press 'q' to quit")
         if not args.no_display:
             cv2.namedWindow(f"Vision - {args.mode}", cv2.WINDOW_NORMAL)
