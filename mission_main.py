@@ -219,11 +219,11 @@ class MissionController:
             self.log(
                 f"  step {step:04d}: found={result.found}, "
                 f"area={result.area}, dist={result.distance_level}"
-                + (f", color={result.label}" if result.label else "")
+                + (f", label={result.label}" if result.label else "")
             )
 
             if result.found:
-                self.log(f"[FOUND] block detected: color={result.label}, area={result.area}")
+                self.log(f"[FOUND] block detected: label={result.label}, area={result.area}")
                 return True
 
             self.drive_rotate_left(turn=90, duration_ms=400)
@@ -408,7 +408,7 @@ def main() -> None:
     parser.add_argument("--camera", type=int, default=0, help="摄像头设备 ID（默认 0 → /dev/video0）")
     parser.add_argument(
         "--block-colors", nargs="+", default=None,
-        help="要检测的方块颜色（默认：red blue green yellow purple orange）",
+        help="[已废弃] 四方体检测不再依赖颜色，此参数被忽略",
     )
 
     # ---- 任务参数 ----
@@ -455,7 +455,6 @@ def main() -> None:
         else:
             vision_obj = VisionPerception(
                 camera_id=args.camera,
-                block_colors=args.block_colors,
                 debug_dir=args.debug_dir if args.save_debug_frames else "",
             )
             vision_obj.open()

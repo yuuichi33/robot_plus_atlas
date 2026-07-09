@@ -1,8 +1,8 @@
 """
-视觉感知模块 —— 基于 OpenCV + PaddleOCR / EasyOCR。
+视觉感知模块 —— 基于 OpenCV + EasyOCR。
 
 功能：
-1. detect_block()      – 检测纯色立方体柱子（HSV 颜色分割 + 轮廓）
+1. detect_block()      – 仅依据几何形状检测竖直四方体柱子，不使用颜色
 2. read_task_text()    – 检测白色 A4 纸上的中文/英文任务文字
 3. detect_qr()         – 检测二维码内容（如 POS=1 / POS=2）
 
@@ -19,145 +19,41 @@ import cv2
 import numpy as np
 
 # ---------------------------------------------------------------------------
-# 尝试导入 OCR 库
-# ARM64 (aarch64) 上 PaddlePaddle 有 segfault 风险，优先用 EasyOCR / Tesseract
+# OCR 引擎 —— 仅使用 EasyOCR
 # ---------------------------------------------------------------------------
-_OCR_ENGINE = None  # "easyocr" | "paddle" | "tesseract" | None
-
-
-def _is_aarch64() -> bool:
-    """检测是否运行在 ARM64 架构上。"""
-    import platform
-    return platform.machine() in ("aarch64", "arm64", "armv7l", "armv8l")
+_easyocr_reader = None
 
 
 def _init_ocr():
-    """延迟初始化 OCR 引擎，避免导入时的启动开销。"""
-    global _OCR_ENGINE
-    if _OCR_ENGINE is not None:
+    """延迟初始化 EasyOCR，避免导入时的启动开销。"""
+    global _easyocr_reader
+    if _easyocr_reader is not None:
         return
 
-    is_arm = _is_aarch64()
-    if is_arm:
-        print("[vision] ARM64 detected, EasyOCR first, Tesseract fallback")
-
-    # 1) EasyOCR（中文识别最准，ARM/x86 通用）
     try:
         import easyocr  # type: ignore
-
-        _ocr = easyocr.Reader(["ch_sim", "en"], gpu=False)
-        _OCR_ENGINE = ("easyocr", _ocr)
+        _easyocr_reader = easyocr.Reader(["ch_sim", "en"], gpu=False)
         print("[vision] OCR engine: EasyOCR")
-        return
     except ImportError:
-        print("[vision] EasyOCR not installed, trying Tesseract...")
+        print("[vision] [WARN] EasyOCR not installed, text recognition disabled!")
     except Exception as exc:
-        print(f"[vision] EasyOCR init failed: {exc}, trying Tesseract...")
-
-    # 2) Tesseract（轻量快速，备选）
-    try:
-        import pytesseract  # type: ignore
-
-        _OCR_ENGINE = ("tesseract", pytesseract)
-        print("[vision] OCR engine: Tesseract")
-        return
-    except ImportError:
-        print("[vision] pytesseract not installed.")
-    except Exception as exc:
-        print(f"[vision] Tesseract init failed: {exc}")
-
-    # 4) PaddleOCR（仅 x86_64，ARM 上跳过避免 segfault）
-    if not is_arm:
-        try:
-            from paddleocr import PaddleOCR  # type: ignore
-
-            for kwargs in [
-                {"lang": "ch", "use_textline_orientation": True},
-                {"lang": "ch", "use_angle_cls": True},
-                {"lang": "ch"},
-            ]:
-                try:
-                    _ocr = PaddleOCR(**kwargs)
-                    break
-                except TypeError:
-                    continue
-
-            _OCR_ENGINE = ("paddle", _ocr)
-            print("[vision] OCR engine: PaddleOCR")
-            return
-        except ImportError:
-            print("[vision] PaddleOCR not installed.")
-        except Exception as exc:
-            print(f"[vision] PaddleOCR init failed: {exc}")
-
-    print("[vision] [WARN] no OCR engine available, text recognition disabled!")
-
-
-def _ocr_preprocess(image: np.ndarray) -> np.ndarray:
-    """OCR 预处理：放大 + 锐化，提高小字识别率。"""
-    h, w = image.shape[:2]
-    # 如果图片太小（任一边 < 200px），放大 2 倍
-    if h < 200 or w < 200:
-        image = cv2.resize(image, (w * 2, h * 2), interpolation=cv2.INTER_CUBIC)
-    # 锐化
-    kernel = np.array([[-1, -1, -1], [-1, 9, -1], [-1, -1, -1]])
-    image = cv2.filter2D(image, -1, kernel)
-    return image
+        print(f"[vision] [WARN] EasyOCR init failed: {exc}")
 
 
 def _ocr_text(image: np.ndarray) -> str:
-    """对图像执行 OCR，返回识别出的文本（拼接所有行）。"""
+    """对图像执行 EasyOCR，返回识别出的文本（拼接所有行）。"""
     _init_ocr()
-    if _OCR_ENGINE is None:
+    if _easyocr_reader is None:
         return ""
 
-    engine_name, engine = _OCR_ENGINE
-
-    if engine_name == "easyocr":
-        results = engine.readtext(image)
-        # 置信度过滤：只保留 > 0.2 的结果
-        texts = [item[1] for item in results if item[2] > 0.2]
-        return " ".join(texts)
-
-    if engine_name == "tesseract":
-        import pytesseract
-        # 预处理：放大 + 锐化
-        image = _ocr_preprocess(image)
-        # PSM 6: 假设为均匀文本块，适合 A4 纸上的文字
-        text = pytesseract.image_to_string(
-            image, lang="chi_sim+eng", config="--psm 6"
-        )
-        # 如果 PSM 6 没结果，用 PSM 3（全自动）再试
-        if not text.strip():
-            text = pytesseract.image_to_string(
-                image, lang="chi_sim+eng", config="--psm 3"
-            )
-        return text.strip()
-
-    if engine_name == "paddle":
-        try:
-            results = engine.ocr(image)
-        except TypeError:
-            results = engine.ocr(image, cls=True)
-
-        if results is None or len(results) == 0:
-            return ""
-        lines = []
-        for group in results:
-            if group is None:
-                continue
-            for line_info in group:
-                text = line_info[1][0]
-                lines.append(text)
-        return " ".join(lines)
-
-    return ""
+    results = _easyocr_reader.readtext(image)
+    texts = [item[1] for item in results if item[2] > 0.2]
+    return " ".join(texts)
 
 
 # ---------------------------------------------------------------------------
-# 颜色范围配置（HSV）
+# 颜色范围配置（HSV）—— 保留用于颜色标定工具 calibrate_color()
 # ---------------------------------------------------------------------------
-# 可以在运行时通过 set_block_color() 修改
 _COLOR_RANGES = {
     "red": (np.array([0, 100, 100]), np.array([10, 255, 255])),
     "red2": (np.array([160, 100, 100]), np.array([180, 255, 255])),
@@ -170,8 +66,11 @@ _COLOR_RANGES = {
     "orange": (np.array([10, 100, 100]), np.array([20, 255, 255])),
 }
 
-# 默认要检测的方块颜色（会尝试所有颜色，找到面积最大的）
-DEFAULT_SCAN_COLORS = ["red", "blue", "green", "yellow", "purple", "orange"]
+# ---------------------------------------------------------------------------
+# 四方体柱几何检测说明
+# ---------------------------------------------------------------------------
+# 目标柱检测完全不使用 HSV 颜色。候选由灰度边缘产生，再依据：
+# 面积、竖直高宽比、矩形度、凸度、长轴竖直度和落地位置综合评分。
 
 
 @dataclass
@@ -179,9 +78,15 @@ class VisionResult:
     found: bool
     center_x: int = 0
     center_y: int = 0
-    area: int = 0
+    area: float = 0.0
     distance_level: str = "unknown"  # "near" | "middle" | "far"
-    label: str = ""  # 颜色标签 / 文字内容
+    label: str = ""                  # cuboid / OCR 原文 / QR 内容
+    bbox: Tuple[int, int, int, int] = (0, 0, 0, 0)
+    aspect_ratio: float = 0.0
+    rectangularity: float = 0.0
+    solidity: float = 0.0
+    verticality: float = 0.0
+    score: float = 0.0
 
 
 # ---------------------------------------------------------------------------
@@ -190,8 +95,13 @@ class VisionResult:
 
 def parse_task_text(raw_text: str) -> Tuple[bool, int, str]:
     """
-    从 OCR 识别的原始文本中解析出 (valid, position, attack)。
-    必须同时识别到位置号(1/2)和动作词(劈砍/刺击)才返回 valid=True。
+    从 OCR 原始文本解析 (valid, position, attack)。
+
+    标准任务文字仅使用：
+      - 位置1/位置2
+      - 劈砍/刺击
+
+    内部仍使用 attack="chop" / "stab" 与动作编号映射对接。
     """
     text = raw_text.strip()
     if not text:
@@ -199,7 +109,10 @@ def parse_task_text(raw_text: str) -> Tuple[bool, int, str]:
 
     import re
 
-    # 找位置号
+    # OCR 可能在汉字之间插入空格或换行，先生成紧凑文本用于中文短语匹配。
+    compact = re.sub(r"\s+", "", text)
+    lower = text.lower()
+
     pos_match = re.search(r"(?:pos|位置)\s*[=:：]?\s*([12])", text, re.IGNORECASE)
     if pos_match is None:
         pos_match = re.search(r"\b([12])\b", text)
@@ -208,19 +121,18 @@ def parse_task_text(raw_text: str) -> Tuple[bool, int, str]:
     if position not in (1, 2):
         return False, position, ""
 
-    # 找动作词（必须找到）
-    chop_words = ["劈", "砍", "chop", "slash", "cut", "斩"]
-    stab_words = ["刺", "击", "stab", "thrust", "pierce", "捅"]
+    # 先匹配完整动作短语，避免把任意"击"误判成刺击。
+    if "刺击" in compact or "刺擊" in compact:
+        return True, position, "stab"
+    if "劈砍" in compact:
+        return True, position, "chop"
 
-    text_lower = text.lower()
-    for w in stab_words:
-        if w in text_lower:
-            return True, position, "stab"
-    for w in chop_words:
-        if w in text_lower:
-            return True, position, "chop"
+    # 英文调试文本兼容。
+    if any(word in lower for word in ("stab", "thrust", "pierce")):
+        return True, position, "stab"
+    if any(word in lower for word in ("chop", "slash", "cut")):
+        return True, position, "chop"
 
-    # 找到位置但没找到动作，无效
     return False, position, ""
 
 
@@ -229,43 +141,51 @@ def parse_task_text(raw_text: str) -> Tuple[bool, int, str]:
 # ---------------------------------------------------------------------------
 
 class VisionPerception:
-    """
-    真实摄像头视觉感知。
-    用法:
-        vp = VisionPerception(camera_id=0, block_colors=["red","blue"])
-        result = vp.detect_block()
-        task = vp.read_task_text()
-    """
+    """真实摄像头视觉感知。目标柱按四方体几何特征检测，与颜色无关。"""
 
     def __init__(
         self,
         camera_id: int = 0,
         frame_width: int = 640,
         frame_height: int = 480,
-        block_colors: Optional[list] = None,
-        block_min_area: int = 5000,
-        block_max_area: int = 200000,
+        block_min_area: int = 3500,
+        block_max_area: int = 220000,
+        cuboid_min_aspect: float = 0.75,
+        cuboid_max_aspect: float = 2.20,
+        cuboid_min_rectangularity: float = 0.50,
+        cuboid_min_solidity: float = 0.76,
+        cuboid_min_score: float = 0.54,
+        cuboid_min_bottom_ratio: float = 0.62,
+        block_middle_area: float = 10000.0,
+        block_near_area: float = 30000.0,
         debug_dir: str = "",
     ):
         self.camera_id = camera_id
         self.frame_width = frame_width
         self.frame_height = frame_height
-        self.block_colors = block_colors or DEFAULT_SCAN_COLORS
         self.block_min_area = block_min_area
         self.block_max_area = block_max_area
+        self.cuboid_min_aspect = cuboid_min_aspect
+        self.cuboid_max_aspect = cuboid_max_aspect
+        self.cuboid_min_rectangularity = cuboid_min_rectangularity
+        self.cuboid_min_solidity = cuboid_min_solidity
+        self.cuboid_min_score = cuboid_min_score
+        self.cuboid_min_bottom_ratio = cuboid_min_bottom_ratio
+        self.block_middle_area = block_middle_area
+        self.block_near_area = block_near_area
         self.debug_dir = debug_dir
 
         self.cap: Optional[cv2.VideoCapture] = None
         self._last_frame: Optional[np.ndarray] = None
+        self._last_annotated_frame: Optional[np.ndarray] = None
+        self._last_block_candidates = []
         self._debug_frame_count = 0
+        self._display_window_name = "Robot Mission Vision"
 
-        # OCR 跳帧优化：每 N 帧才跑一次 OCR（检测仍然每帧跑）
         self._ocr_frame_counter = 0
-        self._ocr_skip_interval = 3  # 每 3 帧 OCR 一次
-
-        # 辅助：用于判断 A4 纸是否被检测到的连续帧计数
+        self._ocr_skip_interval = 3
         self._paper_stable_count = 0
-        self._paper_stable_threshold = 2  # 连续 2 帧确认（减少等待）
+        self._paper_stable_threshold = 2
 
     # ---- 摄像头控制 ----
 
@@ -304,94 +224,257 @@ class VisionPerception:
         self._last_frame = frame
         return frame
 
-    # ---- 方块检测 ----
+    def discard_frames(self, count: int = 4, delay_s: float = 0.01) -> None:
+        """底盘运动后丢弃摄像头缓存旧帧，确保下一次判断使用新画面。"""
+        if self.cap is None:
+            return
+        for _ in range(max(0, count)):
+            self.cap.grab()
+            if delay_s > 0:
+                time.sleep(delay_s)
+
+    @staticmethod
+    def _long_axis_verticality(rect) -> float:
+        """返回最小外接矩形长轴接近竖直方向的程度，范围 0~1。"""
+        box = cv2.boxPoints(rect)
+        edges = []
+        for i in range(4):
+            p1 = box[i]
+            p2 = box[(i + 1) % 4]
+            dx = float(p2[0] - p1[0])
+            dy = float(p2[1] - p1[1])
+            length = (dx * dx + dy * dy) ** 0.5
+            edges.append((length, dx, dy))
+        _, dx, dy = max(edges, key=lambda item: item[0])
+        denom = (dx * dx + dy * dy) ** 0.5
+        return abs(dy) / denom if denom > 1e-6 else 0.0
+
+    @staticmethod
+    def _closeness(value: float, target: float, tolerance: float) -> float:
+        return max(0.0, 1.0 - abs(value - target) / max(tolerance, 1e-6))
+
+    # ---- 四方体柱检测（纯形状） ----
 
     def detect_block(self) -> VisionResult:
         """
-        在当前帧中检测纯色立方体柱子。
-        返回 VisionResult，其中 found=True 表示检测到。
+        检测落地四方体目标。
+
+        检测不使用固定颜色范围，也不判断 red/yellow 等颜色类别。
+        为避免目标与背景在灰度上接近导致边缘消失，同时构造两类边缘：
+
+        1. Lab-L 亮度边缘：覆盖灰色、白色等低彩度四方体；
+        2. Lab-a/b 色度梯度边缘：仅用于恢复物体边界，不限定具体色相。
+
+        候选最终仍按完整轮廓、落地位置、宽高比、矩形度、凸度、
+        竖直性和是否接触画面边界进行几何筛选。
         """
         frame = self.read_frame()
         if frame is None:
             return VisionResult(found=False)
 
-        hsv = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
+        frame_h, frame_w = frame.shape[:2]
+        lab = cv2.cvtColor(frame, cv2.COLOR_BGR2LAB)
+        channel_l, channel_a, channel_b = cv2.split(lab)
 
-        best_contour = None
-        best_area = 0
-        best_label = ""
+        # 亮度边缘：阈值稍高，避免地面纹理产生大量碎边。
+        l_blur = cv2.GaussianBlur(channel_l, (5, 5), 0)
+        l_edges = cv2.Canny(l_blur, 40, 120)
+        l_edges = cv2.morphologyEx(
+            l_edges,
+            cv2.MORPH_CLOSE,
+            cv2.getStructuringElement(cv2.MORPH_RECT, (5, 7)),
+            iterations=1,
+        )
+        l_edges = cv2.dilate(
+            l_edges,
+            cv2.getStructuringElement(cv2.MORPH_RECT, (3, 3)),
+            iterations=1,
+        )
 
-        for color_name in self.block_colors:
-            masks = []
-            if color_name in _COLOR_RANGES:
-                low, high = _COLOR_RANGES[color_name]
-                masks.append(cv2.inRange(hsv, low, high))
-            # red 需要组合两个区间
-            if color_name == "red":
-                if "red" in _COLOR_RANGES:
-                    low, high = _COLOR_RANGES["red"]
-                    masks.append(cv2.inRange(hsv, low, high))
-                if "red2" in _COLOR_RANGES:
-                    low, high = _COLOR_RANGES["red2"]
-                    masks.append(cv2.inRange(hsv, low, high))
-                if len(masks) > 1:
-                    mask = cv2.bitwise_or(masks[0], masks[1])
-                elif len(masks) == 1:
-                    mask = masks[0]
-                else:
-                    continue
-            else:
-                if not masks:
-                    continue
-                mask = masks[0]
+        # 色度梯度边缘：不选择某种颜色，只检测 a/b 通道中的色度突变。
+        # 这可以恢复"彩色目标与灰色地面亮度接近"时在灰度图中消失的轮廓。
+        a_blur = cv2.GaussianBlur(channel_a, (5, 5), 0)
+        b_blur = cv2.GaussianBlur(channel_b, (5, 5), 0)
+        a_edges = cv2.Canny(a_blur, 15, 45)
+        b_edges = cv2.Canny(b_blur, 15, 45)
+        chroma_edges = cv2.bitwise_or(a_edges, b_edges)
+        chroma_edges = cv2.morphologyEx(
+            chroma_edges,
+            cv2.MORPH_CLOSE,
+            cv2.getStructuringElement(cv2.MORPH_RECT, (5, 5)),
+            iterations=2,
+        )
+        chroma_edges = cv2.dilate(
+            chroma_edges,
+            cv2.getStructuringElement(cv2.MORPH_RECT, (3, 3)),
+            iterations=1,
+        )
 
-            # 形态学去噪
-            kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (5, 5))
-            mask = cv2.morphologyEx(mask, cv2.MORPH_OPEN, kernel)
-            mask = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, kernel)
+        # 调试图显示两类边缘的并集，但候选分别提取，避免背景边缘与目标粘连。
+        debug_edges = cv2.bitwise_or(l_edges, chroma_edges)
+        candidates = []
 
-            contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+        def collect_candidates(edge_map: np.ndarray, source: str) -> None:
+            contours, _ = cv2.findContours(
+                edge_map, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE
+            )
 
             for cnt in contours:
-                area = cv2.contourArea(cnt)
+                area = float(cv2.contourArea(cnt))
                 if area < self.block_min_area or area > self.block_max_area:
                     continue
 
-                # 检查形状是否接近矩形（立方体柱子）
-                peri = cv2.arcLength(cnt, True)
-                approx = cv2.approxPolyDP(cnt, 0.04 * peri, True)
-                # 矩形有 4 个顶点，但我们放宽到 4~8（考虑透视变形）
-                if len(approx) < 4 or len(approx) > 8:
-                    continue
-
-                # 检查宽高比是否合理（柱子高约 38cm，宽约 15cm，比例约 2.5:1）
                 x, y, w, h = cv2.boundingRect(cnt)
-                aspect_ratio = h / w if w > 0 else 0
-                if aspect_ratio < 1.2 or aspect_ratio > 4.0:
+                if w < 40 or h < 55:
                     continue
 
-                if area > best_area:
-                    best_area = area
-                    best_contour = cnt
-                    best_label = color_name
+                # 目标应完整出现在画面中。柜体、门框等背景结构通常接触图像边界。
+                border_margin = 6
+                touches_border = (
+                    x <= border_margin
+                    or y <= border_margin
+                    or x + w >= frame_w - border_margin
+                    or y + h >= frame_h - border_margin
+                )
+                if touches_border:
+                    continue
 
-        if best_contour is None:
+                aspect = h / float(w)
+                if not (self.cuboid_min_aspect <= aspect <= self.cuboid_max_aspect):
+                    continue
+
+                bbox_area = float(w * h)
+                rectangularity = area / bbox_area if bbox_area > 0 else 0.0
+                if rectangularity < self.cuboid_min_rectangularity:
+                    continue
+
+                hull = cv2.convexHull(cnt)
+                hull_area = float(cv2.contourArea(hull))
+                solidity = area / hull_area if hull_area > 0 else 0.0
+                if solidity < self.cuboid_min_solidity:
+                    continue
+
+                peri = cv2.arcLength(cnt, True)
+                if peri <= 1e-6:
+                    continue
+                approx = cv2.approxPolyDP(cnt, 0.025 * peri, True)
+                if len(approx) < 4 or len(approx) > 12:
+                    continue
+
+                rect = cv2.minAreaRect(cnt)
+                verticality = self._long_axis_verticality(rect)
+                if verticality < 0.62:
+                    continue
+
+                bottom_ratio = (y + h) / float(frame_h)
+                center_y_ratio = (y + h / 2.0) / float(frame_h)
+                if bottom_ratio < self.cuboid_min_bottom_ratio:
+                    continue
+                if center_y_ratio < 0.52:
+                    continue
+
+                # 当前实物在摄像头中的投影接近 h/w=1.1~1.4，
+                # 不再使用旧版"细长立柱 h/w≈2.5"的错误先验。
+                aspect_score = self._closeness(aspect, 1.25, 1.05)
+                rect_score = min(1.0, max(0.0, (rectangularity - 0.42) / 0.48))
+                solidity_score = min(1.0, max(0.0, (solidity - 0.72) / 0.28))
+                floor_score = min(
+                    1.0, max(0.0, (bottom_ratio - self.cuboid_min_bottom_ratio) / 0.35)
+                )
+                area_score = min(1.0, area / max(self.block_near_area, 1.0))
+                vertex_score = 1.0 if 4 <= len(approx) <= 8 else 0.65
+                source_score = 1.0 if source == "chroma" else 0.72
+
+                score = (
+                    0.22 * aspect_score
+                    + 0.22 * rect_score
+                    + 0.16 * solidity_score
+                    + 0.14 * verticality
+                    + 0.12 * floor_score
+                    + 0.06 * area_score
+                    + 0.04 * vertex_score
+                    + 0.04 * source_score
+                )
+                if score < self.cuboid_min_score:
+                    continue
+
+                candidates.append({
+                    "contour": cnt,
+                    "bbox": (x, y, w, h),
+                    "area": area,
+                    "aspect": aspect,
+                    "rectangularity": rectangularity,
+                    "solidity": solidity,
+                    "verticality": verticality,
+                    "score": score,
+                    "source": source,
+                })
+
+        # 先从色度梯度中恢复完整目标轮廓，再以亮度边缘作为无彩色目标的后备。
+        collect_candidates(chroma_edges, "chroma")
+        collect_candidates(l_edges, "luma")
+
+        # 去除两类边缘产生的重复框。
+        def bbox_iou(a, b) -> float:
+            ax, ay, aw, ah = a
+            bx, by, bw, bh = b
+            x1 = max(ax, bx)
+            y1 = max(ay, by)
+            x2 = min(ax + aw, bx + bw)
+            y2 = min(ay + ah, by + bh)
+            iw = max(0, x2 - x1)
+            ih = max(0, y2 - y1)
+            inter = float(iw * ih)
+            union = float(aw * ah + bw * bh) - inter
+            return inter / union if union > 0 else 0.0
+
+        candidates.sort(key=lambda item: item["score"], reverse=True)
+        unique_candidates = []
+        for cand in candidates:
+            if any(bbox_iou(cand["bbox"], kept["bbox"]) > 0.55 for kept in unique_candidates):
+                continue
+            unique_candidates.append(cand)
+        candidates = unique_candidates
+        self._last_block_candidates = candidates
+
+        annotated = frame.copy()
+        cv2.line(
+            annotated,
+            (frame_w // 2, 0),
+            (frame_w // 2, frame_h),
+            (255, 255, 0),
+            1,
+        )
+        for idx, cand in enumerate(candidates[:8]):
+            x, y, w, h = cand["bbox"]
+            color = (0, 255, 0) if idx == 0 else (0, 165, 255)
+            thickness = 3 if idx == 0 else 1
+            cv2.rectangle(annotated, (x, y), (x + w, y + h), color, thickness)
+            cv2.putText(
+                annotated,
+                f"S={cand['score']:.2f} AR={cand['aspect']:.2f} {cand['source']}",
+                (x, max(18, y - 7)),
+                cv2.FONT_HERSHEY_SIMPLEX,
+                0.45,
+                color,
+                1,
+            )
+        self._last_annotated_frame = annotated
+
+        if not candidates:
+            if self.debug_dir and self._debug_frame_count < 20:
+                self._save_debug_pair(frame, debug_edges, "cuboid_none")
             return VisionResult(found=False)
 
-        # 计算中心点
-        M = cv2.moments(best_contour)
-        if M["m00"] > 0:
-            cx = int(M["m10"] / M["m00"])
-            cy = int(M["m01"] / M["m00"])
-        else:
-            x, y, w, h = cv2.boundingRect(best_contour)
-            cx = x + w // 2
-            cy = y + h // 2
+        best = candidates[0]
+        x, y, w, h = best["bbox"]
+        cx = x + w // 2
+        cy = y + h // 2
+        area = best["area"]
 
-        # 根据面积估算距离等级
-        if best_area > 30000:
+        if area >= self.block_near_area:
             dist = "near"
-        elif best_area > 10000:
+        elif area >= self.block_middle_area:
             dist = "middle"
         else:
             dist = "far"
@@ -400,10 +483,40 @@ class VisionPerception:
             found=True,
             center_x=cx,
             center_y=cy,
-            area=best_area,
+            area=area,
             distance_level=dist,
-            label=best_label,
+            label="cuboid",
+            bbox=(x, y, w, h),
+            aspect_ratio=best["aspect"],
+            rectangularity=best["rectangularity"],
+            solidity=best["solidity"],
+            verticality=best["verticality"],
+            score=best["score"],
         )
+
+    def show_debug(self, state: str, result: Optional[VisionResult] = None) -> bool:
+        """显示自动任务实时画面。返回 False 表示用户按下 q。"""
+        is_block_state = any(key in state for key in ("SEARCH_BLOCK", "ALIGN_BLOCK", "APPROACH_BLOCK"))
+        base = (self._last_annotated_frame if is_block_state and self._last_annotated_frame is not None
+                else self._last_frame)
+        if base is None:
+            return True
+        display = base.copy()
+        cv2.putText(display, f"STATE: {state}", (10, 26),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.65, (255, 255, 255), 2)
+        if result is not None:
+            text = f"found={result.found} area={result.area:.0f} dist={result.distance_level}"
+            cv2.putText(display, text, (10, 52),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.55, (255, 255, 255), 2)
+            if result.found:
+                error_x = result.center_x - self.frame_width // 2
+                text2 = f"err_x={error_x} AR={result.aspect_ratio:.2f} R={result.rectangularity:.2f} S={result.score:.2f}"
+                cv2.putText(display, text2, (10, 76),
+                            cv2.FONT_HERSHEY_SIMPLEX, 0.50, (255, 255, 255), 2)
+                cv2.drawMarker(display, (result.center_x, result.center_y),
+                               (0, 255, 0), cv2.MARKER_CROSS, 26, 2)
+        cv2.imshow(self._display_window_name, display)
+        return (cv2.waitKey(1) & 0xFF) != ord("q")
 
     # ---- A4 白纸文字检测 ----
 
@@ -506,8 +619,6 @@ class VisionPerception:
                 area=best_area,
                 label=raw_text,
             )
-
-        return VisionResult(found=False)
 
         return VisionResult(found=False)
 
@@ -622,7 +733,8 @@ def _draw_detections(frame: np.ndarray, result: VisionResult, mode: str) -> np.n
     if mode == "block" and result.found:
         cx, cy = result.center_x, result.center_y
         cv2.drawMarker(display, (cx, cy), (0, 255, 0), cv2.MARKER_CROSS, 30, 2)
-        label = f"{result.label} area={result.area:.0f} {result.distance_level}"
+        label = (f"cuboid area={result.area:.0f} {result.distance_level} "
+                 f"AR={result.aspect_ratio:.2f} score={result.score:.2f}")
         cv2.putText(display, label, (cx - 60, cy - 20),
                     cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 0), 2)
 
@@ -656,16 +768,12 @@ if __name__ == "__main__":
 
     parser = argparse.ArgumentParser()
     parser.add_argument("--camera", type=int, default=0, help="摄像头设备 ID")
-    parser.add_argument("--mode", choices=["block", "text", "qr", "calibrate"], default="block")
+    parser.add_argument("--mode", choices=["block", "text", "qr"], default="block")
     parser.add_argument("--no-display", action="store_true", help="不弹窗显示画面（Atlas 无头模式）")
     parser.add_argument("--debug-dir", default=".", help="调试帧保存目录")
     args = parser.parse_args()
 
-    if args.mode == "calibrate":
-        calibrate_color(args.camera)
-        exit(0)
-
-    with VisionPerception(camera_id=args.camera) as vp:
+    with VisionPerception(camera_id=args.camera, debug_dir=args.debug_dir) as vp:
         print(f"Mode: {args.mode}, press 'q' to quit")
         if not args.no_display:
             cv2.namedWindow(f"Vision - {args.mode}", cv2.WINDOW_NORMAL)
@@ -680,9 +788,10 @@ if __name__ == "__main__":
                     result = vp.detect_block()
                     if result.found:
                         print(
-                            f"  [{frame_idx}] [OK] block found: color={result.label}, "
+                            f"  [{frame_idx}] [OK] cuboid found: label={result.label}, "
                             f"area={result.area:.0f}, center=({result.center_x},{result.center_y}), "
-                            f"dist={result.distance_level}"
+                            f"dist={result.distance_level}, AR={result.aspect_ratio:.2f}, "
+                            f"rect={result.rectangularity:.2f}, score={result.score:.2f}"
                         )
                     else:
                         if frame_idx % 10 == 1:
@@ -710,7 +819,10 @@ if __name__ == "__main__":
 
                 # 显示画面
                 if not args.no_display and vp._last_frame is not None:
-                    display = _draw_detections(vp._last_frame, result, args.mode)
+                    base = (vp._last_annotated_frame
+                            if args.mode == "block" and vp._last_annotated_frame is not None
+                            else vp._last_frame)
+                    display = _draw_detections(base, result, args.mode)
                     cv2.imshow(f"Vision - {args.mode}", display)
                     if cv2.waitKey(1) & 0xFF == ord("q"):
                         break
