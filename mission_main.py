@@ -208,25 +208,25 @@ class MissionController:
             result = self.perception.detect_block()
 
             if result.found:
-                error_x = result.center_x - 320  # 640/2
+                error_x = result.center_x - 320
                 self.log(
-                    f"  step {step:04d}: found, area={result.area:.0f}, "
-                    f"center_x={result.center_x}, err_x={error_x}"
+                    f"  step {step:04d}: FOUND area={result.area:.0f} "
+                    f"cx={result.center_x} err={error_x} score={result.score:.2f}"
                 )
-                # 必须居中才确认找到
-                if abs(error_x) < 50:
+                # 居中就确认（放宽到 80px）
+                if abs(error_x) < 80:
                     self.log(f"[FOUND] cuboid centered, area={result.area:.0f}")
                     return True
                 # 没居中：小角度旋转对准
                 if error_x > 0:
-                    self.drive_rotate_right(turn=min(60, abs(error_x)), duration_ms=150)
+                    self.drive_rotate_right(turn=min(60, abs(error_x) // 2), duration_ms=200)
                 else:
-                    self.drive_rotate_left(turn=min(60, abs(error_x)), duration_ms=150)
+                    self.drive_rotate_left(turn=min(60, abs(error_x) // 2), duration_ms=200)
                 time.sleep(0.2)
                 step += 1
                 continue
 
-            if step % 10 == 0:
+            if step % 3 == 0:
                 self.log(f"  step {step:04d}: not found, searching...")
             self.drive_rotate_left(turn=60, duration_ms=300)
             time.sleep(0.1)

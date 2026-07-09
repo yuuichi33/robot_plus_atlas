@@ -148,14 +148,14 @@ class VisionPerception:
         camera_id: int = 0,
         frame_width: int = 640,
         frame_height: int = 480,
-        block_min_area: int = 3500,
-        block_max_area: int = 220000,
-        cuboid_min_aspect: float = 0.75,
-        cuboid_max_aspect: float = 2.20,
-        cuboid_min_rectangularity: float = 0.50,
-        cuboid_min_solidity: float = 0.76,
-        cuboid_min_score: float = 0.54,
-        cuboid_min_bottom_ratio: float = 0.62,
+        block_min_area: int = 1500,
+        block_max_area: int = 250000,
+        cuboid_min_aspect: float = 0.55,
+        cuboid_max_aspect: float = 3.0,
+        cuboid_min_rectangularity: float = 0.35,
+        cuboid_min_solidity: float = 0.60,
+        cuboid_min_score: float = 0.38,
+        cuboid_min_bottom_ratio: float = 0.35,
         block_middle_area: float = 10000.0,
         block_near_area: float = 30000.0,
     ):
@@ -274,9 +274,9 @@ class VisionPerception:
         lab = cv2.cvtColor(frame, cv2.COLOR_BGR2LAB)
         channel_l, channel_a, channel_b = cv2.split(lab)
 
-        # 亮度边缘：阈值稍高，避免地面纹理产生大量碎边。
+        # 亮度边缘：放宽阈值以捕获更多轮廓。
         l_blur = cv2.GaussianBlur(channel_l, (5, 5), 0)
-        l_edges = cv2.Canny(l_blur, 40, 120)
+        l_edges = cv2.Canny(l_blur, 25, 80)
         l_edges = cv2.morphologyEx(
             l_edges,
             cv2.MORPH_CLOSE,
@@ -293,8 +293,8 @@ class VisionPerception:
         # 这可以恢复"彩色目标与灰色地面亮度接近"时在灰度图中消失的轮廓。
         a_blur = cv2.GaussianBlur(channel_a, (5, 5), 0)
         b_blur = cv2.GaussianBlur(channel_b, (5, 5), 0)
-        a_edges = cv2.Canny(a_blur, 15, 45)
-        b_edges = cv2.Canny(b_blur, 15, 45)
+        a_edges = cv2.Canny(a_blur, 10, 30)
+        b_edges = cv2.Canny(b_blur, 10, 30)
         chroma_edges = cv2.bitwise_or(a_edges, b_edges)
         chroma_edges = cv2.morphologyEx(
             chroma_edges,
@@ -322,11 +322,11 @@ class VisionPerception:
                     continue
 
                 x, y, w, h = cv2.boundingRect(cnt)
-                if w < 40 or h < 55:
+                if w < 25 or h < 35:
                     continue
 
                 # 目标应完整出现在画面中。柜体、门框等背景结构通常接触图像边界。
-                border_margin = 6
+                border_margin = 4
                 touches_border = (
                     x <= border_margin
                     or y <= border_margin
@@ -355,19 +355,19 @@ class VisionPerception:
                 if peri <= 1e-6:
                     continue
                 approx = cv2.approxPolyDP(cnt, 0.025 * peri, True)
-                if len(approx) < 4 or len(approx) > 12:
+                if len(approx) < 4 or len(approx) > 16:
                     continue
 
                 rect = cv2.minAreaRect(cnt)
                 verticality = self._long_axis_verticality(rect)
-                if verticality < 0.62:
+                if verticality < 0.45:
                     continue
 
                 bottom_ratio = (y + h) / float(frame_h)
                 center_y_ratio = (y + h / 2.0) / float(frame_h)
                 if bottom_ratio < self.cuboid_min_bottom_ratio:
                     continue
-                if center_y_ratio < 0.52:
+                if center_y_ratio < 0.30:
                     continue
 
                 # 当前实物在摄像头中的投影接近 h/w=1.1~1.4，
@@ -379,7 +379,7 @@ class VisionPerception:
                     1.0, max(0.0, (bottom_ratio - self.cuboid_min_bottom_ratio) / 0.35)
                 )
                 area_score = min(1.0, area / max(self.block_near_area, 1.0))
-                vertex_score = 1.0 if 4 <= len(approx) <= 8 else 0.65
+                vertex_score = 1.0 if 4 <= len(approx) <= 10 else 0.65
                 source_score = 1.0 if source == "chroma" else 0.72
 
                 score = (
