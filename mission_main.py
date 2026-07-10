@@ -205,47 +205,58 @@ class MissionController:
             raise
 
     # ------------------------------------------------------------------
-    # 阶段 1：转圈搜索方块
+    # 阶段 1：转圈搜索方块（每60度停5秒检测）
     # ------------------------------------------------------------------
 
     def search_block(self) -> bool:
-        self.log("[SEARCH] searching for cuboid...")
+        self.log("[SEARCH] step-rotate 60°, stop 5s to detect...")
         step = 0
         while True:
-            result = self.perception.detect_block()
+            # 转 60 度
+            self.drive_rotate_left(turn=60, duration_ms=400)
+            time.sleep(0.3)
 
-            if result.found:
-                error_x = result.center_x - 320
-                self.log(
-                    f"  step {step:04d}: FOUND area={result.area:.0f} "
-                    f"cx={result.center_x} err={error_x} score={result.score:.2f}"
-                )
-                # 居中就确认（底盘能动时 80px，不能动时放宽到 200px）
-                center_tolerance = 200 if not self.enable_chassis else 80
-                if abs(error_x) < center_tolerance:
-                    self._show_frame()
-                    self.log(f"[FOUND] cuboid accepted, area={result.area:.0f}")
-                    return True
-                # 没居中且底盘能动：旋转对准
-                if not self.enable_chassis:
-                    self.log(f"  chassis disabled, cannot center, retrying...")
-                    time.sleep(0.3)
-                    step += 1
-                    continue
-                if error_x > 0:
-                    self.drive_rotate_right(turn=min(60, abs(error_x) // 2), duration_ms=200)
-                else:
-                    self.drive_rotate_left(turn=min(60, abs(error_x) // 2), duration_ms=200)
+            # 停下检测 5 秒
+            self.log(f"  step {step:04d}: stopped, detecting for 5s...")
+            deadline = time.time() + 5.0
+            while time.time() < deadline:
+                result = self.perception.detect_block()
+                self._show_frame()
+
+                if result.found:
+                    self.log(
+                        f"  step {step:04d}: FOUND area={result.area:.0f} "
+                        f"cx={result.center_x} score={result.score:.2f}"
+                    )
+                    # 左右微调居中
+                    if self._center_cuboid(result):
+                        return True
+                    # 居中失败（底盘不动或调不好），直接接受
+                    center_tolerance = 200 if not self.enable_chassis else 80
+                    if abs(result.center_x - 320) < center_tolerance:
+                        self.log(f"[FOUND] cuboid accepted")
+                        return True
                 time.sleep(0.2)
-                step += 1
-                continue
 
-            if step % 3 == 0:
-                self.log(f"  step {step:04d}: not found, searching...")
-            self._show_frame()
-            self.drive_rotate_left(turn=60, duration_ms=300)
-            time.sleep(0.1)
+            self.log(f"  step {step:04d}: not found in this direction")
             step += 1
+
+    def _center_cuboid(self, result) -> bool:
+        """左右微调使四方体居中，直到成功或丢失。"""
+        if not self.enable_chassis:
+            return False
+        while True:
+            error_x = result.center_x - 320
+            if abs(error_x) < 80:
+                return True
+            if error_x > 0:
+                self.drive_rotate_right(turn=min(50, abs(error_x) // 2), duration_ms=200)
+            else:
+                self.drive_rotate_left(turn=min(50, abs(error_x) // 2), duration_ms=200)
+            time.sleep(0.3)
+            result = self.perception.detect_block()
+            if not result.found:
+                return False
 
     # ------------------------------------------------------------------
     # 阶段 2：缓慢绕四方体移动 + 扫描文字
@@ -264,17 +275,23 @@ class MissionController:
             block = self.perception.detect_block()
 
             if not block.found:
-                # 丢了：原地自转搜索，直到找回
+                # 丢了：转60°、停5秒检测，直到找回
                 self.drive_stop()
-                self.log(f"  orbit {step:02d}: block lost, spinning to recover...")
+                self.log(f"  orbit {step:02d}: block lost, step-rotate to recover...")
                 while True:
-                    block = self.perception.detect_block()
+                    self.drive_rotate_left(turn=60, duration_ms=400)
+                    time.sleep(0.3)
+                    deadline = time.time() + 5.0
+                    while time.time() < deadline:
+                        block = self.perception.detect_block()
+                        self._show_frame()
+                        if block.found:
+                            self.log(f"  [FOUND] block recovered, area={block.area:.0f}")
+                            break
+                        time.sleep(0.2)
                     if block.found:
-                        self.log(f"  [FOUND] block recovered, area={block.area:.0f}")
                         break
-                    self._show_frame()
-                    self.drive_rotate_left(turn=45, duration_ms=250)
-                    time.sleep(0.1)
+                    self.log(f"  orbit {step:02d}: still searching...")
                     step += 1
                 continue
 
