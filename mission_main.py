@@ -258,18 +258,16 @@ class MissionController:
         """
         self.log("[ORBIT] orbiting cuboid, scanning for text...")
         step = 0
-        max_steps = self.max_scan_steps
 
-        while step < max_steps:
+        while True:
             # ---- 检测四方体 ----
             block = self.perception.detect_block()
 
             if not block.found:
-                # 丢了：原地慢转搜索
+                # 丢了：原地自转搜索，直到找回
                 self.drive_stop()
-                self.log(f"  orbit {step:02d}: block lost, re-searching...")
-                search_substep = 0
-                while search_substep < 60:  # 最多转 60 步找回
+                self.log(f"  orbit {step:02d}: block lost, spinning to recover...")
+                while True:
                     block = self.perception.detect_block()
                     if block.found:
                         self.log(f"  [FOUND] block recovered, area={block.area:.0f}")
@@ -277,11 +275,7 @@ class MissionController:
                     self._show_frame()
                     self.drive_rotate_left(turn=45, duration_ms=250)
                     time.sleep(0.1)
-                    search_substep += 1
                     step += 1
-                if not block.found:
-                    self.log("[ORBIT] block lost permanently, abort")
-                    return TaskResult(valid=False)
                 continue
 
             # ---- 四方体在视野中，保持居中 ----
@@ -314,7 +308,9 @@ class MissionController:
                     self.drive_stop()
                     self.log(f"[TEXT] spotted: \"{result.label[:30]}\", stopping to confirm...")
                     time.sleep(0.5)
-                    for retry in range(120):
+                    retry = 0
+                    while True:
+                        retry += 1
                         result2 = self.perception.read_task_text()
                         if result2.found and result2.label:
                             if _parse_task_text is not None:
@@ -337,13 +333,8 @@ class MissionController:
                             if retry % 10 == 0:
                                 self.log(f"  confirm {retry}: waiting for OCR...")
                         time.sleep(0.5)
-                    self.log("  confirm timeout, resume orbiting...")
 
             step += 1
-
-        self.drive_stop()
-        self.log("[ORBIT] max steps reached, no text found")
-        return TaskResult(valid=False)
 
     # ------------------------------------------------------------------
     # 阶段 3：转圈搜索 QR 码 → 对准 → 靠近 → 验证
@@ -358,10 +349,8 @@ class MissionController:
         """
         self.log(f"[QR] searching for QR code, expected POS={expected_position}...")
         search_step = 0
-        max_search = 120  # 最多转 120 步
 
-        # ---------- 第一轮：转圈找 QR ----------
-        while search_step < max_search:
+        while True:
             result = self.perception.detect_qr()
 
             if result.found and result.label:
@@ -371,7 +360,7 @@ class MissionController:
 
                 # 靠近 QR 直到足够近
                 self.log("  [QR] approaching QR code...")
-                for _ in range(8):  # 最多靠近 8 步
+                for _ in range(999):  # 靠近步数
                     # 居中对准
                     error_x = result.center_x - 320  # 640/2
                     if abs(error_x) > 50:
@@ -413,10 +402,6 @@ class MissionController:
             self.drive_rotate_left(turn=45, duration_ms=250)
             time.sleep(0.1)
             search_step += 1
-
-        self.drive_stop()
-        self.log("[QR] max search steps reached, QR not found")
-        return False
 
     @staticmethod
     def _parse_qr_position(qr_text: str) -> int:
