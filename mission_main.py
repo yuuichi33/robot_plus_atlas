@@ -147,6 +147,14 @@ class MissionController:
             return
         self.robot.rotate_right(turn=turn, duration_ms=duration_ms)
 
+    def drive_arc_left(self, speed: int, turn: int, duration_ms: int) -> None:
+        """同时前进+左转，走出弧线绕行。"""
+        if not self.enable_chassis:
+            self.log(f"[SKIP] chassis arc_left: speed={speed}, turn={turn}, ms={duration_ms}")
+            time.sleep(duration_ms / 1000.0)
+            return
+        self.robot.move(0, speed, abs(turn), duration_ms)
+
     # ------------------------------------------------------------------
     # 主流程
     # ------------------------------------------------------------------
@@ -317,12 +325,10 @@ class MissionController:
                     self.drive_rotate_left(turn=turn_amount, duration_ms=200)
                 time.sleep(0.15)
             else:
-                # 在视野中 → 前进绕行 + 扫描文字
+                # 在视野中 → 弧线绕行（前进+左转同时）+ 扫描文字
                 self._show_frame()
-                self.drive_forward(speed=8, duration_ms=500)
+                self.drive_arc_left(speed=8, turn=12, duration_ms=700)
                 time.sleep(0.3)
-                self.drive_rotate_left(turn=10, duration_ms=200)
-                time.sleep(0.2)
 
                 # 扫描文字
                 result = self.perception.read_task_text()
