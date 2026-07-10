@@ -1,8 +1,9 @@
 # Atlas 200I DK A2 机器人任务控制系统 — 部署与调试指南
 
-> 硬件：Atlas 200I DK A2 + Hikvision USB 摄像头 + 机器人底盘  
+> 硬件：Atlas 200I DK A2 + 1080P USB 摄像头 + 机器人底盘  
 > 系统：Ubuntu 22.04 (aarch64), Python 3.9 (conda)  
-> 工作目录：`~/robot_mission/260709/`
+> 工作目录：`~/robot_mission/260709/`  
+> **当前设备**：摄像头 `/dev/video1`，底盘串口 `/dev/ttyUSB1`
 
 ---
 
@@ -17,62 +18,100 @@ pip3 install opencv-python numpy easyocr pyserial
 ### 2. 验证硬件
 
 ```bash
-# 摄像头
+# 摄像头（每次重启后编号可能变，先用 ls 确认）
 ls /dev/video*
-python3 -c "import cv2; cap=cv2.VideoCapture(0); print(cap.read()[0])"
+python3 -c "import cv2; cap=cv2.VideoCapture(1); print(cap.read()[0])"
 
 # 底盘串口（底盘需上电）
 ls /dev/ttyUSB*
-python3 -c "import serial; s=serial.Serial('/dev/ttyUSB0',115200); print('OK'); s.close()"
+python3 -c "import serial; s=serial.Serial('/dev/ttyUSB1',115200); print('OK'); s.close()"
+```
+
+### 3. 摄像头打不开的排查
+
+```bash
+# 看 USB 总线上有没有摄像头
+lsusb | grep -i cam
+
+# 看内核日志有没有 USB 报错
+dmesg | tail -20 | grep -i -E "usb|uvc|cam"
+
+# 看 video 设备编号
+ls /dev/video*
+
+# 如果有设备但打不开，重载驱动
+modprobe -r uvcvideo 2>/dev/null; modprobe uvcvideo; sleep 2; ls /dev/video*
 ```
 
 ---
 
 ## 二、调试命令
 
-### 1. 纯视觉测试（底盘不动，不连串口）
+### 1. 纯视觉测试（不连串口）
 
 ```bash
-# 方块检测
-python3 vision.py --mode block
-
-# 文字识别
-python3 vision.py --mode text
+python3 vision.py --mode block --camera 1
 ```
 
-### 2. 视觉 + 动作测试（底盘上电、不动）
+### 2. 底盘不动 + 动作测试
 
 ```bash
-python3 mission_main.py --vision --camera 0 --port /dev/ttyUSB0 --display
+python3 mission_main.py --vision --camera 1 --port /dev/ttyUSB1 --display
 ```
 
-底盘通电但不动，识别到文字和 QR 后会发串口指令执行动作。
+底盘通电但不动，识别文字/QR 后会发串口执行砍刺动作。
 
-### 3. 完整真实运行（底盘会上电移动）
+### 3. 完整真实运行
 
 ```bash
-python3 mission_main.py --vision --camera 0 --enable-chassis --port /dev/ttyUSB0 --display
+python3 mission_main.py --vision --camera 1 --enable-chassis --port /dev/ttyUSB1 --display
 ```
 
-机器人会转圈搜索 → 绕行扫描文字 → 识别后执行动作 → 搜索 QR → 验证后执行动作。
+### 4. 后台运行（断 SSH 不中断）
+
+```bash
+nohup python3 mission_main.py --vision --camera 1 --enable-chassis --port /dev/ttyUSB1 > /tmp/mission.log 2>&1 &
+tail -f /tmp/mission.log
+```
 
 ---
 
-## 三、命令行参数
+## 三、任务流程
+
+```
+SEARCH_BLOCK  转60° → 停5秒检测 → 找到则左右微调居中
+    ↓
+ORBIT_AND_SCAN  绕四方体移动，保持居中，扫描文字
+    ├─ 四方体丢了 → 转60°/停5秒搜索找回
+    ├─ 扫到文字 → 刹停 → 静止 OCR 确认（不限时）
+    └─ 确认成功 → 执行第一次动作
+    ↓
+SEARCH_QR  原地转圈找 QR 码（不限时）
+    ├─ 找到 → 靠近 → 验证 → 匹配则执行第二次动作
+    └─ 继续找
+    ↓
+FINISHED
+```
+
+所有等待均为无限，只有成功才会推进。
+
+---
+
+## 四、命令行参数
 
 | 参数 | 说明 |
 |------|------|
 | `--vision` | 启用真实摄像头 |
-| `--camera 0` | 摄像头编号 |
-| `--port /dev/ttyUSB0` | 底盘串口 |
-| `--enable-chassis` | 允许底盘移动（不加则只发动作不移动） |
+| `--camera 1` | 摄像头编号（当前是 1，每次重启确认） |
+| `--port /dev/ttyUSB1` | 底盘串口（当前是 1） |
+| `--enable-chassis` | 允许底盘移动 |
 | `--dry-run` | 完全模拟，不连串口 |
-| `--display` | 显示摄像头实时画面（按 q 退出） |
-| `--no-qr` | 跳过 QR 扫描阶段 |
+| `--display` | 显示摄像头画面（按 q 退出） |
+| `--no-qr` | 跳过 QR 扫描 |
 
 ---
 
-## 四、开机自启
+## 五、开机自启
 
 ```bash
 cat > /etc/systemd/system/robot-mission.service << 'EOF'
@@ -84,7 +123,7 @@ After=multi-user.target
 Type=simple
 WorkingDirectory=/root/robot_mission/260709
 Environment=PYTHONUNBUFFERED=1
-ExecStart=/usr/local/miniconda3/bin/python3 -u /root/robot_mission/260709/mission_main.py --vision --camera 0 --enable-chassis --port /dev/ttyUSB0
+ExecStart=/usr/local/miniconda3/bin/python3 -u /root/robot_mission/260709/mission_main.py --vision --camera 1 --enable-chassis --port /dev/ttyUSB1
 Restart=no
 User=root
 StandardOutput=append:/var/log/robot-mission.log
@@ -97,6 +136,28 @@ EOF
 systemctl daemon-reload
 systemctl enable robot-mission.service
 ```
+
+### 管理命令
+
+```bash
+systemctl start robot-mission.service     # 启动
+systemctl stop robot-mission.service      # 停止
+systemctl disable robot-mission.service   # 取消自启
+systemctl status robot-mission.service    # 查看状态
+tail -100 /var/log/robot-mission.log      # 查看日志
+> /var/log/robot-mission.log              # 清空日志
+```
+
+---
+
+## 六、常见问题
+
+| 问题 | 解决 |
+|------|------|
+| 摄像头打不开 | `ls /dev/video*` 确认编号，`modprobe -r uvcvideo; modprobe uvcvideo` 重载驱动 |
+| 串口找不到 | 底盘上电了吗？`ls /dev/ttyUSB*` |
+| 方块检测不到 | `python3 vision.py --mode block --camera 1` 确认视野 |
+| OCR 太慢 | ARM CPU 正常，已优化跳帧+缩放到 200px |
 
 ### 管理命令
 
