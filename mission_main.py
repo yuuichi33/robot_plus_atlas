@@ -169,7 +169,12 @@ class MissionController:
             if not found:
                 raise RuntimeError("未找到四方体，任务终止")
 
-            # 阶段 2：缓慢绕四方体移动 + 扫描文字，发现文字立即停
+            # 找到后停 5 秒
+            self.log("[FOUND] cuboid found, pausing 5s...")
+            self.drive_stop()
+            time.sleep(5)
+
+            # 阶段 2：缓慢绕四方体移动 + 扫描文字
             self.state = MissionState.ORBIT_AND_SCAN
             task = self.orbit_and_scan()
             if not task.valid:
@@ -303,20 +308,20 @@ class MissionController:
                     f"err_x={error_x}, dist={block.distance_level}"
                 )
 
-            # 偏差大 → 优先旋转对准
-            if abs(error_x) > 50:
-                turn_amount = min(60, abs(error_x) // 2)
+            # 偏差大 → 旋转拉回视野
+            if abs(error_x) > 100:
+                turn_amount = min(40, abs(error_x) // 3)
                 if error_x > 0:
                     self.drive_rotate_right(turn=turn_amount, duration_ms=200)
                 else:
                     self.drive_rotate_left(turn=turn_amount, duration_ms=200)
                 time.sleep(0.15)
             else:
-                # 居中 → 小步绕行 + 扫描文字
+                # 在视野中 → 前进绕行 + 扫描文字
                 self._show_frame()
-                self.drive_forward(speed=6, duration_ms=300)
-                time.sleep(0.2)
-                self.drive_rotate_left(turn=15, duration_ms=300)
+                self.drive_forward(speed=8, duration_ms=500)
+                time.sleep(0.3)
+                self.drive_rotate_left(turn=10, duration_ms=200)
                 time.sleep(0.2)
 
                 # 扫描文字
@@ -359,66 +364,75 @@ class MissionController:
 
     def search_and_approach_qr(self, expected_position: int) -> bool:
         """
-        原地慢转搜索 QR 码。找到后：
-        1. 旋转使 QR 居中
-        2. 前进靠近
-        3. 靠近后重新扫描验证位置是否匹配
+        转 60° → 停 5 秒扫 QR。找到后直接验证。
         """
         self.log(f"[QR] searching for QR code, expected POS={expected_position}...")
         search_step = 0
 
         while True:
-            result = self.perception.detect_qr()
+            # 转 60°，途中也扫
+            self.log(f"  qr step {search_step:03d}: rotating 60°...")
+            rotate_end = time.time() + 0.7
+            self.drive_rotate_left(turn=60, duration_ms=400)
+            while time.time() < rotate_end:
+                result = self.perception.detect_qr()
+                self._show_frame()
+                if result.found and result.label:
+                    self.drive_stop()
+                    return self._verify_qr(result, expected_position)
+                time.sleep(0.1)
 
-            if result.found and result.label:
-                self.log(f"  [FOUND] QR: \"{result.label}\" at x={result.center_x}")
-                self.drive_stop()
+            # 停 5 秒扫描
+            deadline = time.time() + 5.0
+            while time.time() < deadline:
+                result = self.perception.detect_qr()
+                self._show_frame()
+                if result.found and result.label:
+                    return self._verify_qr(result, expected_position)
                 time.sleep(0.2)
 
-                # 靠近 QR 直到足够近
-                self.log("  [QR] approaching QR code...")
-                for _ in range(999):  # 靠近步数
-                    # 居中对准
-                    error_x = result.center_x - 320  # 640/2
-                    if abs(error_x) > 50:
-                        if error_x > 0:
-                            self.drive_rotate_right(turn=min(60, abs(error_x) // 2), duration_ms=200)
-                        else:
-                            self.drive_rotate_left(turn=min(60, abs(error_x) // 2), duration_ms=200)
-                        time.sleep(0.2)
-
-                    # 前进一小步
-                    self.drive_forward(speed=12, duration_ms=350)
-                    time.sleep(0.2)
-
-                    # 重新检测 QR
-                    result = self.perception.detect_qr()
-                    if not result.found:
-                        self.log("  [QR] lost during approach, re-searching...")
-                        break
-
-                self.drive_stop()
-                time.sleep(0.3)
-
-                # 靠近后做最终验证
-                if result.found and result.label:
-                    pos_value = self._parse_qr_position(result.label)
-                    if pos_value == expected_position:
-                        self.log(f"[OK] QR verified: POS={pos_value}, matched!")
-                        return True
-                    elif pos_value in (1, 2):
-                        self.log(f"[WARN] QR POS={pos_value}, expected {expected_position}, but proceed anyway")
-                        return True
-                    else:
-                        self.log(f"  QR parse failed: \"{result.label}\"")
-                continue  # 验证失败，继续转圈找
-
-            if search_step % 10 == 0:
-                self.log(f"  qr search {search_step:03d}: not found")
-
-            self.drive_rotate_left(turn=45, duration_ms=250)
-            time.sleep(0.1)
+            if search_step % 5 == 0:
+                self.log(f"  qr step {search_step:03d}: not found")
             search_step += 1
+
+    def _verify_qr(self, result, expected_position: int) -> bool:
+        """验证 QR 内容是否匹配，并靠近。"""
+        self.log(f"  [FOUND] QR: \"{result.label}\" at x={result.center_x}")
+        self.drive_stop()
+        time.sleep(0.2)
+
+        # 底盘能动：靠近 QR
+        if self.enable_chassis:
+            self.log("  [QR] approaching...")
+            for _ in range(8):
+                error_x = result.center_x - 320
+                if abs(error_x) > 50:
+                    if error_x > 0:
+                        self.drive_rotate_right(turn=min(60, abs(error_x) // 2), duration_ms=200)
+                    else:
+                        self.drive_rotate_left(turn=min(60, abs(error_x) // 2), duration_ms=200)
+                    time.sleep(0.2)
+                self.drive_forward(speed=12, duration_ms=350)
+                time.sleep(0.2)
+                result = self.perception.detect_qr()
+                if not result.found:
+                    self.log("  [QR] lost during approach")
+                    return False
+            self.drive_stop()
+            time.sleep(0.3)
+
+        # 验证内容
+        if result.found and result.label:
+            pos_value = self._parse_qr_position(result.label)
+            if pos_value == expected_position:
+                self.log(f"[OK] QR verified: POS={pos_value}, matched!")
+                return True
+            elif pos_value in (1, 2):
+                self.log(f"[WARN] QR POS={pos_value}, expected {expected_position}, proceed anyway")
+                return True
+            else:
+                self.log(f"  QR parse failed: \"{result.label}\"")
+        return False
 
     @staticmethod
     def _parse_qr_position(qr_text: str) -> int:
