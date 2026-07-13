@@ -274,17 +274,24 @@ class MissionController:
 
     def orbit_and_scan(self) -> TaskResult:
         """
-        径向对准四方体，切向慢速平移绕行。
-        每移一小步，停下检查四方体上是否有白纸文字。
-        有文字→停止→OCR；没有→继续平移。
+        弧线绕行四方体，每步前进+左转走出弧线。
+        停下检查四方体上是否有白纸文字。
+        累计旋转角度达360°时退出（绕完一圈所有面）。
         """
-        self.log("[ORBIT] strafe tangentially, facing cuboid, checking for text...")
+        self.log("[ORBIT] arc around cuboid, scanning for text...")
         step = 0
+        total_rotate_deg = 0       # 累计绕行旋转角度（°）
+        MAX_ORBIT_DEG = 360        # 绕完一圈终止
+        MAX_BLOCK_SEARCH = 6       # 方块丢失最多找回6次 (6×60°=360°)
+        OCR_CONFIRM_RETRY = 10     # OCR确认最多重试次数
+        ARC_TURN_PER_STEP = 15     # 每步弧线旋转角度（°）
 
-        while True:
-            # ---- 1. 切向平移一小步（很慢） ----
+        while total_rotate_deg < MAX_ORBIT_DEG:
+            # ---- 1. 弧线运动一小步（前进+左转） ----
             self._show_frame()
-            self.drive_strafe_left(speed=5, duration_ms=500)
+            self.drive_arc_left(speed=5, turn=ARC_TURN_PER_STEP, duration_ms=500)
+            total_rotate_deg += ARC_TURN_PER_STEP
+            self.log(f"  orbit {step:02d}: arc +{ARC_TURN_PER_STEP}°, total={total_rotate_deg:.0f}°")
             time.sleep(0.3)
 
             # ---- 2. 停下，确认四方体在视野中 ----
@@ -292,8 +299,13 @@ class MissionController:
             block = self.perception.detect_block()
             if not block.found:
                 self.log(f"  orbit {step:02d}: block lost, searching...")
-                while True:
+                search_count = 0
+                while search_count < MAX_BLOCK_SEARCH:
                     self.drive_rotate_left(turn=60, duration_ms=400)
+                    total_rotate_deg += 60
+                    if total_rotate_deg >= MAX_ORBIT_DEG:
+                        self.log("[ORBIT] exceeded 360° during block search, aborting")
+                        return TaskResult(valid=False)
                     rotate_end = time.time() + 0.7
                     while time.time() < rotate_end:
                         block = self.perception.detect_block()
@@ -303,6 +315,7 @@ class MissionController:
                         time.sleep(0.1)
                     if block.found:
                         break
+                    # 停下再搜5秒
                     deadline = time.time() + 5.0
                     while time.time() < deadline:
                         block = self.perception.detect_block()
@@ -312,25 +325,34 @@ class MissionController:
                         time.sleep(0.2)
                     if block.found:
                         break
-                    step += 1
+                    search_count += 1
+                    self.log(f"  block search attempt {search_count}/{MAX_BLOCK_SEARCH}")
+                if not block.found:
+                    self.log("[ORBIT] block not found after max search attempts")
+                    return TaskResult(valid=False)
 
             # ---- 3. 径向回正：让四方体回到视野中央 ----
             for _ in range(5):
                 error_x = block.center_x - 320
                 if abs(error_x) < 60:
                     break
+                turn_deg = min(30, abs(error_x) // 4)
                 if error_x > 0:
-                    self.drive_rotate_right(turn=min(30, abs(error_x)//4), duration_ms=200)
+                    self.drive_rotate_right(turn=turn_deg, duration_ms=200)
                 else:
-                    self.drive_rotate_left(turn=min(30, abs(error_x)//4), duration_ms=200)
+                    self.drive_rotate_left(turn=turn_deg, duration_ms=200)
+                    total_rotate_deg += turn_deg
                 time.sleep(0.2)
                 block = self.perception.detect_block()
                 if not block.found:
                     break
 
-            # ---- 4. 扫文字：没白纸等5秒，有白纸最多等60秒 ----
-            if step % 3 == 0:
-                self.log(f"  orbit {step:02d}: facing cuboid, checking for text...")
+            if total_rotate_deg >= MAX_ORBIT_DEG:
+                self.log("[ORBIT] completed 360° orbit without finding text")
+                return TaskResult(valid=False)
+
+            # ---- 4. 扫文字：没白纸等3秒，有白纸最多等15秒 ----
+            self.log(f"  orbit {step:02d} ({total_rotate_deg:.0f}°): facing cuboid, checking for text...")
 
             text_found = False
             start = time.time()
@@ -341,9 +363,9 @@ class MissionController:
                     break
                 has_white = getattr(self.perception, '_white_detected', False)
                 elapsed = time.time() - start
-                if (not has_white and elapsed > 5) or (has_white and elapsed > 60):
-                    if has_white and elapsed > 60:
-                        self.log("  orbit: OCR failed for 60s despite white paper, moving on")
+                if (not has_white and elapsed > 3) or (has_white and elapsed > 15):
+                    if has_white and elapsed > 15:
+                        self.log("  orbit: OCR failed for 15s despite white paper, moving on")
                     break
                 time.sleep(0.3)
 
@@ -351,12 +373,12 @@ class MissionController:
                 step += 1
                 continue
 
+            # ---- 5. OCR确认：最多重试 OCR_CONFIRM_RETRY 次 ----
             self.drive_stop()
             self.log(f"[TEXT] spotted: \"{result.label[:30]}\", stopping to OCR...")
             time.sleep(0.5)
-            retry = 0
-            while True:
-                retry += 1
+            confirmed = False
+            for retry in range(1, OCR_CONFIRM_RETRY + 1):
                 result2 = self.perception.read_task_text()
                 if result2.found and result2.label:
                     if _parse_task_text is not None:
@@ -376,11 +398,15 @@ class MissionController:
                         self.log(f"[TASK] confirmed: position={pos}, attack={att}")
                         return TaskResult(valid=True, position=pos, attack=att)
                 else:
-                    if retry % 10 == 0:
+                    if retry % 5 == 0:
                         self.log(f"  confirm {retry}: waiting for OCR...")
                 time.sleep(0.5)
 
+            self.log(f"  OCR confirm failed after {OCR_CONFIRM_RETRY} retries, continue orbit")
             step += 1
+
+        self.log("[ORBIT] completed full 360° orbit without finding valid text")
+        return TaskResult(valid=False)
 
     # ------------------------------------------------------------------
     # 阶段 3：转圈搜索 QR 码 → 对准 → 靠近 → 验证
