@@ -183,6 +183,7 @@ class VisionPerception:
         self._ocr_skip_interval = 5
         self._ocr_max_width = 200  # ROI 缩放到此宽度再送 OCR，ARM 上提速
         self._paper_stable_count = 0
+        self._white_detected = False  # 是否检测到白色区域（供绕行逻辑判断有纸/无纸）
         self._paper_stable_threshold = 1  # 首次识别到就立即返回，避免绕行时丢帧
 
     # ---- 摄像头控制 ----
@@ -538,7 +539,9 @@ class VisionPerception:
         if frame is None:
             return VisionResult(found=False)
 
-        # 1) 检测白色区域（A4 纸）
+        self._white_detected = False  # 每帧重置
+
+        # 1) 检测白色区域
         hsv = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
 
         # 宽松的白色范围：低饱和度 + 高亮度
@@ -574,6 +577,8 @@ class VisionPerception:
         if best_cnt is None:
             self._paper_stable_count = 0
             return VisionResult(found=False)
+
+        self._white_detected = True  # 有白纸！
 
         # 2) 提取白色区域并做 OCR（只做一次，避免多次 OCR 卡顿）
         x, y, w, h = cv2.boundingRect(best_cnt)
@@ -650,11 +655,16 @@ class VisionPerception:
         # 方法1：单码检测
         data, bbox, _ = detector.detectAndDecode(gray)
         if not data:
-            # 方法2：多码检测
-            data_list, bbox_list, _ = detector.detectAndDecodeMulti(gray)
-            if data_list and len(data_list) > 0:
-                data = data_list[0]
-                bbox = bbox_list[0] if bbox_list is not None else None
+            # 方法2：多码检测（不同 OpenCV 版本返回值不同）
+            try:
+                result = detector.detectAndDecodeMulti(gray)
+                if result is not None and len(result) >= 2:
+                    data_list, bbox_list = result[0], result[1]
+                    if data_list and len(data_list) > 0:
+                        data = data_list[0]
+                        bbox = bbox_list[0] if bbox_list is not None else None
+            except (ValueError, TypeError, AttributeError):
+                pass
 
         if data and bbox is not None:
             pts = bbox.reshape(-1, 2).astype(int)

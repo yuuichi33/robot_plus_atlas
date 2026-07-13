@@ -328,40 +328,57 @@ class MissionController:
                 if not block.found:
                     break
 
-            # ---- 4. 检查四方体上有没有白纸文字 ----
+            # ---- 4. 扫文字：没白纸等5秒，有白纸最多等60秒 ----
             if step % 3 == 0:
                 self.log(f"  orbit {step:02d}: facing cuboid, checking for text...")
 
-            result = self.perception.read_task_text()
-            if result.found and result.label:
-                self.drive_stop()
-                self.log(f"[TEXT] spotted: \"{result.label[:30]}\", stopping to OCR...")
-                time.sleep(0.5)
-                retry = 0
-                while True:
-                    retry += 1
-                    result2 = self.perception.read_task_text()
-                    if result2.found and result2.label:
-                        if _parse_task_text is not None:
-                            valid, pos, att = _parse_task_text(result2.label)
-                        else:
-                            valid = True
-                            import re
-                            pm = re.search(r"位置\s*([12])", result2.label)
-                            pos = int(pm.group(1)) if pm else 1
-                            att = ("chop" if "劈" in result2.label or "砍" in result2.label
-                                   or "chop" in result2.label.lower() else "stab")
-                        self.log(
-                            f"  confirm {retry}: valid={valid}, "
-                            f"text=\"{result2.label[:30]}\", pos={pos}, att={att}"
-                        )
-                        if valid:
-                            self.log(f"[TASK] confirmed: position={pos}, attack={att}")
-                            return TaskResult(valid=True, position=pos, attack=att)
+            text_found = False
+            start = time.time()
+            while True:
+                result = self.perception.read_task_text()
+                if result.found and result.label:
+                    text_found = True
+                    break
+                has_white = getattr(self.perception, '_white_detected', False)
+                elapsed = time.time() - start
+                if (not has_white and elapsed > 5) or (has_white and elapsed > 60):
+                    if has_white and elapsed > 60:
+                        self.log("  orbit: OCR failed for 60s despite white paper, moving on")
+                    break
+                time.sleep(0.3)
+
+            if not text_found:
+                step += 1
+                continue
+
+            self.drive_stop()
+            self.log(f"[TEXT] spotted: \"{result.label[:30]}\", stopping to OCR...")
+            time.sleep(0.5)
+            retry = 0
+            while True:
+                retry += 1
+                result2 = self.perception.read_task_text()
+                if result2.found and result2.label:
+                    if _parse_task_text is not None:
+                        valid, pos, att = _parse_task_text(result2.label)
                     else:
-                        if retry % 10 == 0:
-                            self.log(f"  confirm {retry}: waiting for OCR...")
-                    time.sleep(0.5)
+                        valid = True
+                        import re
+                        pm = re.search(r"位置\s*([12])", result2.label)
+                        pos = int(pm.group(1)) if pm else 1
+                        att = ("chop" if "劈" in result2.label or "砍" in result2.label
+                               or "chop" in result2.label.lower() else "stab")
+                    self.log(
+                        f"  confirm {retry}: valid={valid}, "
+                        f"text=\"{result2.label[:30]}\", pos={pos}, att={att}"
+                    )
+                    if valid:
+                        self.log(f"[TASK] confirmed: position={pos}, attack={att}")
+                        return TaskResult(valid=True, position=pos, attack=att)
+                else:
+                    if retry % 10 == 0:
+                        self.log(f"  confirm {retry}: waiting for OCR...")
+                time.sleep(0.5)
 
             step += 1
 
@@ -405,42 +422,23 @@ class MissionController:
             search_step += 1
 
     def _verify_qr(self, result, expected_position: int) -> bool:
-        """验证 QR 内容是否匹配，并靠近。"""
+        """扫到 QR → 前进 3 秒 → 按扫到的内容匹配。"""
         self.log(f"  [FOUND] QR: \"{result.label}\" at x={result.center_x}")
-        self.drive_stop()
-        time.sleep(0.2)
 
-        # 底盘能动：靠近 QR
-        if self.enable_chassis:
-            self.log("  [QR] approaching...")
-            for _ in range(8):
-                error_x = result.center_x - 320
-                if abs(error_x) > 50:
-                    if error_x > 0:
-                        self.drive_rotate_right(turn=min(60, abs(error_x) // 2), duration_ms=200)
-                    else:
-                        self.drive_rotate_left(turn=min(60, abs(error_x) // 2), duration_ms=200)
-                    time.sleep(0.2)
-                self.drive_forward(speed=12, duration_ms=350)
-                time.sleep(0.2)
-                result = self.perception.detect_qr()
-                if not result.found:
-                    self.log("  [QR] lost during approach")
-                    return False
-            self.drive_stop()
-            time.sleep(0.3)
+        # 前进 3 秒
+        self.log("  [QR] moving forward 3s...")
+        self.drive_forward(speed=10, duration_ms=3000)
+        time.sleep(0.5)
 
-        # 验证内容
-        if result.found and result.label:
-            pos_value = self._parse_qr_position(result.label)
-            if pos_value == expected_position:
-                self.log(f"[OK] QR verified: POS={pos_value}, matched!")
-                return True
-            elif pos_value in (1, 2):
-                self.log(f"[WARN] QR POS={pos_value}, expected {expected_position}, proceed anyway")
-                return True
-            else:
-                self.log(f"  QR parse failed: \"{result.label}\"")
+        # 用前进前扫到的内容匹配
+        pos_value = self._parse_qr_position(result.label)
+        if pos_value == expected_position:
+            self.log(f"[OK] QR verified: POS={pos_value}, matched!")
+            return True
+        elif pos_value in (1, 2):
+            self.log(f"[WARN] QR POS={pos_value}, expected {expected_position}, proceed anyway")
+            return True
+        self.log(f"  QR parse failed: \"{result.label}\"")
         return False
 
     @staticmethod
