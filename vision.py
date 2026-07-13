@@ -40,15 +40,40 @@ def _init_ocr():
         print(f"[vision] [WARN] EasyOCR init failed: {exc}")
 
 
+def _preprocess_for_ocr(image: np.ndarray) -> np.ndarray:
+    """OCR 前预处理：灰度+自适应对比度增强，让文字更清晰、CRAFT 更快收敛。"""
+    # 转灰度（EasyOCR 内部也会转，但先做对比度增强再送入效果更好）
+    gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY) if len(image.shape) == 3 else image
+    # CLAHE 自适应对比度增强 —— 局部拉伸文字与背景的区分度
+    clahe = cv2.createCLAHE(clipLimit=3.0, tileGridSize=(8, 8))
+    gray = clahe.apply(gray)
+    # 轻微锐化，让文字边缘更清晰
+    kernel_sharpen = np.array([[0, -1, 0], [-1, 5, -1], [0, -1, 0]], dtype=np.float32)
+    gray = cv2.filter2D(gray, -1, kernel_sharpen)
+    # EasyOCR 接受灰度输入
+    return gray
+
+
 def _ocr_text(image: np.ndarray) -> str:
     """对图像执行 EasyOCR，返回识别出的文本（拼接所有行）。"""
     _init_ocr()
     if _easyocr_reader is None:
         return ""
 
+    # 预处理：增强文字清晰度，帮助 CRAFT 快速定位文字区域
+    processed = _preprocess_for_ocr(image)
+
     import time as _t
     t0 = _t.time()
-    results = _easyocr_reader.readtext(image, detail=1, canvas_size=1280, add_spaces=False)
+    # 降低 text_threshold / low_text 让 CRAFT 检测阶段更快收敛（少算弱候选）
+    results = _easyocr_reader.readtext(
+        processed,
+        detail=1,
+        canvas_size=1280,
+        add_spaces=False,
+        text_threshold=0.6,   # 默认 0.7，降低后跳过更多低置信区域
+        low_text=0.3,         # 默认 0.4，降低后 CRAFT 更快退排除弱文字
+    )
     dt = _t.time() - t0
     print(f"[vision] OCR executed in {dt:.1f}s, found {len(results)} regions")
     for item in results:
@@ -187,8 +212,8 @@ class VisionPerception:
         self._display_window_name = "Robot Mission Vision"
 
         self._ocr_frame_counter = 0
-        self._ocr_skip_interval = 3  # 每3帧才执行一次OCR，减少CPU负担
-        self._ocr_max_width = 640  # ROI 缩放到此宽度再送 OCR，200太小导致文字无法识别
+        self._ocr_skip_interval = 5  # 每5帧才执行一次OCR，进一步减少CPU负担
+        self._ocr_max_width = 480  # ROI 缩放到此宽度再送 OCR，更小图CRAFT更快
         self._paper_stable_count = 0
         self._white_detected = False  # 是否检测到白色区域（供绕行逻辑判断有纸/无纸）
         self._paper_stable_threshold = 1  # 首次识别到就立即返回，避免绕行时丢帧
