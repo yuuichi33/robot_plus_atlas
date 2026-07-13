@@ -172,24 +172,24 @@ class MissionController:
         self.robot.backward(speed=speed, duration_ms=duration_ms)
 
     def _find_and_center_block(self, max_search: int = 8) -> VisionResult:
-        """视觉找回方块并回正到视野中央。丢失时左右搜索找回。"""
+        """视觉找回方块并回正到视野中央。丢失时慢速旋转搜索找回。"""
         block = self.perception.detect_block()
 
         if not block.found:
             self.log("  cuboid not in view, searching...")
             found_in_search = False
             for attempt in range(max_search):
-                # 左转搜索
-                self.drive_rotate_left(turn=500, duration_ms=700)
-                time.sleep(0.3)
+                # 慢速左转搜索（和阶段1一样慢速旋转，确保视觉有时间检测）
+                self.drive_rotate_left(turn=60, duration_ms=400)
+                time.sleep(0.5)
                 block = self.perception.detect_block()
                 self._show_frame()
                 if block.found:
                     found_in_search = True
                     break
-                # 右转搜索
-                self.drive_rotate_right(turn=500, duration_ms=700)
-                time.sleep(0.3)
+                # 慢速右转搜索
+                self.drive_rotate_right(turn=60, duration_ms=400)
+                time.sleep(0.5)
                 block = self.perception.detect_block()
                 self._show_frame()
                 if block.found:
@@ -284,17 +284,17 @@ class MissionController:
             raise
 
     # ------------------------------------------------------------------
-    # 阶段 1：旋转搜索方块
+    # 阶段 1：转圈搜索方块（慢速旋转，停5秒检测）
     # ------------------------------------------------------------------
 
     def search_block(self) -> bool:
-        self.log("[SEARCH] rotating to find cuboid...")
+        self.log("[SEARCH] step-rotate, stop 5s to detect...")
         step = 0
         while True:
-            # 旋转搜索，途中也检测
+            # 慢速旋转，途中也检测
             self.log(f"  step {step:04d}: rotating...")
-            rotate_end = time.time() + 1.2  # 700ms 旋转 + 余量
-            self.drive_rotate_left(turn=500, duration_ms=700)
+            rotate_end = time.time() + 0.7  # 400ms 旋转 + 余量
+            self.drive_rotate_left(turn=60, duration_ms=400)
             while time.time() < rotate_end:
                 result = self.perception.detect_block()
                 self._show_frame()
@@ -429,10 +429,10 @@ class MissionController:
         search_step = 0
 
         while True:
-            # 旋转搜索，途中也扫
+            # 慢速旋转搜索，途中也扫
             self.log(f"  qr step {search_step:03d}: rotating...")
-            rotate_end = time.time() + 1.2
-            self.drive_rotate_left(turn=500, duration_ms=700)
+            rotate_end = time.time() + 0.7
+            self.drive_rotate_left(turn=60, duration_ms=400)
             while time.time() < rotate_end:
                 result = self.perception.detect_qr()
                 self._show_frame()
