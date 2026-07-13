@@ -201,18 +201,19 @@ class MissionController:
                 self.log("  cuboid not found after search")
                 return VisionResult(found=False)
 
-        # 回正：微调让方块回到视野中央
+        # 回正：微调让方块回到视野中央（宽松阈值，避免旋转丢失方块）
         self.log(f"  cuboid found (cx={block.center_x}), centering...")
         for adjust in range(10):
             error_x = block.center_x - 320
-            if abs(error_x) < 40:
+            if abs(error_x) < 100:
                 self.log(f"  centered (error_x={error_x})")
                 break
+            # 极小幅度微调（turn=30 ≈ 3%功率，远小于搜索用的60）
             if error_x > 0:
-                self.drive_rotate_right(turn=200, duration_ms=200)
+                self.drive_rotate_right(turn=30, duration_ms=150)
             else:
-                self.drive_rotate_left(turn=200, duration_ms=200)
-            time.sleep(0.2)
+                self.drive_rotate_left(turn=30, duration_ms=150)
+            time.sleep(0.3)
             block = self.perception.detect_block()
             self._show_frame()
             if not block.found:
