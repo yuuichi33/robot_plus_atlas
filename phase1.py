@@ -57,13 +57,19 @@ def main():
             # 扫二维码
             result = vp.detect_qr()
             if result.found and result.label:
-                pos = parse_qr(result.label)
-                print(f"[phase1] QR: \"{result.label}\" → pos={pos}")
-                if pos in (1, 2):
-                    print(f"[phase1] 执行: 位置{pos} {last_att}")
-                    robot.run_task(pos, last_att)
-                    time.sleep(1)
-                    robot.stop()
+                qr_pos = parse_qr(result.label)
+                print(f"[phase1] QR: \"{result.label}\" → pos={qr_pos}")
+                if qr_pos in (1, 2):
+                    if qr_pos == last_pos:
+                        print(f"[phase1] QR 匹配文字位置{last_pos}，执行: {last_att}")
+                        robot.run_task(last_pos, last_att)
+                        time.sleep(1)
+                        robot.stop()
+                    else:
+                        print(f"[phase1] QR 位置{qr_pos} 与文字位置{last_pos} 不一致，后退")
+                        robot.backward(speed=15, duration_ms=800)
+                        time.sleep(1)
+                        robot.stop()
 
             time.sleep(0.3)
 
