@@ -32,7 +32,7 @@ def _init_ocr():
 
     try:
         import easyocr  # type: ignore
-        _easyocr_reader = easyocr.Reader(["ch_sim", "en"], gpu=False)
+        _easyocr_reader = easyocr.Reader(["ch_sim", "en"], gpu=False, quantize=True)
         print("[vision] OCR engine: EasyOCR")
     except ImportError:
         print("[vision] [WARN] EasyOCR not installed, text recognition disabled!")
@@ -46,8 +46,15 @@ def _ocr_text(image: np.ndarray) -> str:
     if _easyocr_reader is None:
         return ""
 
-    results = _easyocr_reader.readtext(image)
-    texts = [item[1] for item in results if item[2] > 0.2]
+    import time as _t
+    t0 = _t.time()
+    results = _easyocr_reader.readtext(image, detail=1, canvas_size=1280, add_spaces=False)
+    dt = _t.time() - t0
+    print(f"[vision] OCR executed in {dt:.1f}s, found {len(results)} regions")
+    for item in results:
+        bbox, text, conf = item[0], item[1], item[2]
+        print(f"[vision]   region: conf={conf:.3f} text=\"{text}\"")
+    texts = [item[1] for item in results if item[2] > 0.1]
     return " ".join(texts)
 
 
@@ -180,8 +187,8 @@ class VisionPerception:
         self._display_window_name = "Robot Mission Vision"
 
         self._ocr_frame_counter = 0
-        self._ocr_skip_interval = 5
-        self._ocr_max_width = 200  # ROI 缩放到此宽度再送 OCR，ARM 上提速
+        self._ocr_skip_interval = 3  # 每3帧才执行一次OCR，减少CPU负担
+        self._ocr_max_width = 640  # ROI 缩放到此宽度再送 OCR，200太小导致文字无法识别
         self._paper_stable_count = 0
         self._white_detected = False  # 是否检测到白色区域（供绕行逻辑判断有纸/无纸）
         self._paper_stable_threshold = 1  # 首次识别到就立即返回，避免绕行时丢帧
@@ -593,20 +600,19 @@ class VisionPerception:
             self._paper_stable_count = 0
             return VisionResult(found=False)
 
-        # 跳帧优化：不是每帧都 OCR
+        # 跳帧 + 白纸条件：只有检测到白纸且达到跳帧间隔才执行 OCR
         self._ocr_frame_counter += 1
+        if not self._white_detected:
+            return VisionResult(found=False)
         if self._ocr_frame_counter % self._ocr_skip_interval != 0:
             return VisionResult(found=False)
 
-        # 中央裁切：只保留画面中央 3/4，裁掉边缘噪声
-        rh, rw = roi.shape[:2]
-        crop_t = rh // 8
-        crop_b = rh - rh // 8
-        crop_l = rw // 8
-        crop_r = rw - rw // 8
-        roi_cropped = roi[crop_t:crop_b, crop_l:crop_r] if rh > 40 and rw > 40 else roi
+        print(f"[vision] OCR frame #{self._ocr_frame_counter}, ROI size={roi.shape[1]}x{roi.shape[0]}")
 
-        # 缩小 ROI 加速 OCR（ARM 上 EasyOCR 对大图很慢）
+        # 不做中央裁切——裁切可能把文字切掉
+        roi_cropped = roi
+
+        # 缩小 ROI 加速 OCR（但保留足够宽度让文字可识别）
         rh2, rw2 = roi_cropped.shape[:2]
         if rw2 > self._ocr_max_width:
             scale = self._ocr_max_width / rw2
@@ -617,6 +623,7 @@ class VisionPerception:
         if raw_text:
             print(f"[vision] OCR raw: \"{raw_text[:60]}\"")
         else:
+            print(f"[vision] OCR raw: (empty)")
             self._paper_stable_count = 0
             return VisionResult(found=False)
 

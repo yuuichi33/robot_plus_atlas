@@ -358,7 +358,7 @@ class MissionController:
 
             self.log(f"  face {face_idx}: cuboid centered (area={block.area:.0f}), scanning text...")
 
-            # ---- 2. 扫文字：没白纸等3秒，有白纸最多等15秒 ----
+            # ---- 2. 扫文字：没白纸等3秒，有白纸最多等60秒（CPU OCR每帧3~5秒，需要更多时间） ----
             text_found = False
             result = None
             start = time.time()
@@ -369,9 +369,9 @@ class MissionController:
                     break
                 has_white = getattr(self.perception, '_white_detected', False)
                 elapsed = time.time() - start
-                if (not has_white and elapsed > 3) or (has_white and elapsed > 15):
-                    if has_white and elapsed > 15:
-                        self.log(f"  face {face_idx}: OCR failed 15s despite white paper")
+                if (not has_white and elapsed > 3) or (has_white and elapsed > 60):
+                    if has_white and elapsed > 60:
+                        self.log(f"  face {face_idx}: OCR failed 60s despite white paper")
                     else:
                         self.log(f"  face {face_idx}: no white paper in 3s")
                     break
