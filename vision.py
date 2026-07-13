@@ -643,19 +643,31 @@ class VisionPerception:
         if frame is None:
             return VisionResult(found=False)
 
+        # 转灰度提高 QR 识别率
+        gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
         detector = cv2.QRCodeDetector()
-        data, bbox, _ = detector.detectAndDecode(frame)
+
+        # 方法1：单码检测
+        data, bbox, _ = detector.detectAndDecode(gray)
+        if not data:
+            # 方法2：多码检测
+            data_list, bbox_list, _ = detector.detectAndDecodeMulti(gray)
+            if data_list and len(data_list) > 0:
+                data = data_list[0]
+                bbox = bbox_list[0] if bbox_list is not None else None
 
         if data and bbox is not None:
-            # bbox shape: (1, 4, 2) 或 (4, 2)
             pts = bbox.reshape(-1, 2).astype(int)
             cx = int(np.mean(pts[:, 0]))
             cy = int(np.mean(pts[:, 1]))
+            qr_w = int(np.max(pts[:, 0]) - np.min(pts[:, 0]))
+            qr_h = int(np.max(pts[:, 1]) - np.min(pts[:, 1]))
+            print(f"[vision] QR detected: \"{data.strip()}\" area={qr_w*qr_h}")
             return VisionResult(
                 found=True,
                 center_x=cx,
                 center_y=cy,
-                area=0,
+                area=float(qr_w * qr_h),
                 label=data.strip(),
             )
 

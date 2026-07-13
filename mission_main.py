@@ -386,7 +386,8 @@ class MissionController:
                 self._show_frame()
                 if result.found and result.label:
                     self.drive_stop()
-                    return self._verify_qr(result, expected_position)
+                    if self._verify_qr(result, expected_position):
+                        return True
                 time.sleep(0.1)
 
             # 停 5 秒扫描
@@ -395,7 +396,8 @@ class MissionController:
                 result = self.perception.detect_qr()
                 self._show_frame()
                 if result.found and result.label:
-                    return self._verify_qr(result, expected_position)
+                    if self._verify_qr(result, expected_position):
+                        return True
                 time.sleep(0.2)
 
             if search_step % 5 == 0:
