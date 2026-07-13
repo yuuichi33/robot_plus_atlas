@@ -70,7 +70,6 @@ def _ocr_text(image: np.ndarray) -> str:
         processed,
         detail=1,
         canvas_size=1280,
-        add_spaces=False,
         text_threshold=0.6,   # 默认 0.7，降低后跳过更多低置信区域
         low_text=0.3,         # 默认 0.4，降低后 CRAFT 更快退排除弱文字
     )
