@@ -155,6 +155,14 @@ class MissionController:
             return
         self.robot.move(0, speed, abs(turn), duration_ms)
 
+    def drive_strafe_left(self, speed: int, duration_ms: int) -> None:
+        """横向左移（切向运动），保持径向对准四方体。"""
+        if not self.enable_chassis:
+            self.log(f"[SKIP] chassis strafe_left: speed={speed}, ms={duration_ms}")
+            time.sleep(duration_ms / 1000.0)
+            return
+        self.robot.move(90, speed, 0, duration_ms)
+
     # ------------------------------------------------------------------
     # 主流程
     # ------------------------------------------------------------------
@@ -266,24 +274,24 @@ class MissionController:
 
     def orbit_and_scan(self) -> TaskResult:
         """
-        弧线绕行一步 → 停下回正看四方体 → 检查有无白纸文字。
-        有文字就停止绕行做 OCR，没有就继续绕。
+        径向对准四方体，切向慢速平移绕行。
+        每移一小步，停下检查四方体上是否有白纸文字。
+        有文字→停止→OCR；没有→继续平移。
         """
-        self.log("[ORBIT] arc-step → check text, repeat...")
+        self.log("[ORBIT] strafe tangentially, facing cuboid, checking for text...")
         step = 0
 
         while True:
-            # ---- 1. 走一小段弧线 ----
+            # ---- 1. 切向平移一小步（很慢） ----
             self._show_frame()
-            self.drive_arc_left(speed=8, turn=12, duration_ms=700)
+            self.drive_strafe_left(speed=5, duration_ms=500)
             time.sleep(0.3)
 
             # ---- 2. 停下，确认四方体在视野中 ----
             self.drive_stop()
             block = self.perception.detect_block()
             if not block.found:
-                # 丢了：转60°/停5秒找回
-                self.log(f"  orbit {step:02d}: block lost after arc, searching...")
+                self.log(f"  orbit {step:02d}: block lost, searching...")
                 while True:
                     self.drive_rotate_left(turn=60, duration_ms=400)
                     rotate_end = time.time() + 0.7
@@ -291,7 +299,6 @@ class MissionController:
                         block = self.perception.detect_block()
                         if block.found:
                             self.drive_stop()
-                            self.log(f"  [FOUND] block recovered")
                             break
                         time.sleep(0.1)
                     if block.found:
@@ -301,31 +308,30 @@ class MissionController:
                         block = self.perception.detect_block()
                         self._show_frame()
                         if block.found:
-                            self.log(f"  [FOUND] block recovered")
                             break
                         time.sleep(0.2)
                     if block.found:
                         break
                     step += 1
 
-            # ---- 3. 回正对准四方体 ----
+            # ---- 3. 径向回正：让四方体回到视野中央 ----
             for _ in range(5):
                 error_x = block.center_x - 320
-                if abs(error_x) < 80:
+                if abs(error_x) < 60:
                     break
                 if error_x > 0:
-                    self.drive_rotate_right(turn=min(40, abs(error_x)//3), duration_ms=200)
+                    self.drive_rotate_right(turn=min(30, abs(error_x)//4), duration_ms=200)
                 else:
-                    self.drive_rotate_left(turn=min(40, abs(error_x)//3), duration_ms=200)
+                    self.drive_rotate_left(turn=min(30, abs(error_x)//4), duration_ms=200)
                 time.sleep(0.2)
                 block = self.perception.detect_block()
                 if not block.found:
                     break
 
+            # ---- 4. 检查四方体上有没有白纸文字 ----
             if step % 3 == 0:
-                self.log(f"  orbit {step:02d}: checking for text...")
+                self.log(f"  orbit {step:02d}: facing cuboid, checking for text...")
 
-            # ---- 4. 检查有没有白纸文字 ----
             result = self.perception.read_task_text()
             if result.found and result.label:
                 self.drive_stop()
@@ -357,7 +363,6 @@ class MissionController:
                             self.log(f"  confirm {retry}: waiting for OCR...")
                     time.sleep(0.5)
 
-            # 没字，继续绕
             step += 1
 
     # ------------------------------------------------------------------
