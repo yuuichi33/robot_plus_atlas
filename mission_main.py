@@ -163,6 +163,64 @@ class MissionController:
             return
         self.robot.move(90, speed, 0, duration_ms)
 
+    def drive_backward(self, speed: int, duration_ms: int) -> None:
+        """后退。"""
+        if not self.enable_chassis:
+            self.log(f"[SKIP] chassis backward: speed={speed}, duration_ms={duration_ms}")
+            time.sleep(duration_ms / 1000.0)
+            return
+        self.robot.backward(speed=speed, duration_ms=duration_ms)
+
+    def _find_and_center_block(self, max_search: int = 8) -> VisionResult:
+        """视觉找回方块并回正到视野中央。丢失时左右搜索找回。"""
+        block = self.perception.detect_block()
+
+        if not block.found:
+            self.log("  cuboid not in view, searching...")
+            found_in_search = False
+            for attempt in range(max_search):
+                # 左转搜索
+                self.drive_rotate_left(turn=500, duration_ms=700)
+                time.sleep(0.3)
+                block = self.perception.detect_block()
+                self._show_frame()
+                if block.found:
+                    found_in_search = True
+                    break
+                # 右转搜索
+                self.drive_rotate_right(turn=500, duration_ms=700)
+                time.sleep(0.3)
+                block = self.perception.detect_block()
+                self._show_frame()
+                if block.found:
+                    found_in_search = True
+                    break
+                self.log(f"  search attempt {attempt + 1}/{max_search}")
+
+            if not found_in_search:
+                self.log("  cuboid not found after search")
+                return VisionResult(found=False)
+
+        # 回正：微调让方块回到视野中央
+        self.log(f"  cuboid found (cx={block.center_x}), centering...")
+        for adjust in range(10):
+            error_x = block.center_x - 320
+            if abs(error_x) < 40:
+                self.log(f"  centered (error_x={error_x})")
+                break
+            if error_x > 0:
+                self.drive_rotate_right(turn=200, duration_ms=200)
+            else:
+                self.drive_rotate_left(turn=200, duration_ms=200)
+            time.sleep(0.2)
+            block = self.perception.detect_block()
+            self._show_frame()
+            if not block.found:
+                self.log("  cuboid lost during centering")
+                return VisionResult(found=False)
+
+        return block
+
     # ------------------------------------------------------------------
     # 主流程
     # ------------------------------------------------------------------
@@ -226,17 +284,17 @@ class MissionController:
             raise
 
     # ------------------------------------------------------------------
-    # 阶段 1：转圈搜索方块（每60度停5秒检测）
+    # 阶段 1：旋转搜索方块
     # ------------------------------------------------------------------
 
     def search_block(self) -> bool:
-        self.log("[SEARCH] step-rotate 60°, stop 5s to detect...")
+        self.log("[SEARCH] rotating to find cuboid...")
         step = 0
         while True:
-            # 转 60 度，途中也检测
-            self.log(f"  step {step:04d}: rotating 60°...")
-            rotate_end = time.time() + 0.7  # 400ms 旋转 + 余量
-            self.drive_rotate_left(turn=60, duration_ms=400)
+            # 旋转搜索，途中也检测
+            self.log(f"  step {step:04d}: rotating...")
+            rotate_end = time.time() + 1.2  # 700ms 旋转 + 余量
+            self.drive_rotate_left(turn=500, duration_ms=700)
             while time.time() < rotate_end:
                 result = self.perception.detect_block()
                 self._show_frame()
@@ -258,7 +316,7 @@ class MissionController:
                 if result.found:
                     self.log(
                         f"  step {step:04d}: FOUND area={result.area:.0f} "
-                        f"cx={result.center_x} score={result.score:.2f}"
+                        f"cx={result.center_x} score={getattr(result, 'score', 0):.2f}"
                     )
                     return True
                 time.sleep(0.2)
@@ -267,94 +325,41 @@ class MissionController:
             step += 1
 
     # ------------------------------------------------------------------
-
-    # ------------------------------------------------------------------
-    # 阶段 2：缓慢绕四方体移动 + 扫描文字
+    # 阶段 2：分段绕行立方体，逐面扫描文字
     # ------------------------------------------------------------------
 
     def orbit_and_scan(self) -> TaskResult:
         """
-        弧线绕行四方体，每步前进+左转走出弧线。
-        停下检查四方体上是否有白纸文字。
-        累计旋转角度达360°时退出（绕完一圈所有面）。
+        分段绕行立方体：面向方块 → 扫文字 → 没找到 → 右转90° → 前进 → 左转90° → 再面向方块。
+        立方体4个面，最多绕行4次覆盖所有面。
         """
-        self.log("[ORBIT] arc around cuboid, scanning for text...")
-        step = 0
-        total_rotate_deg = 0       # 累计绕行旋转角度（°）
-        MAX_ORBIT_DEG = 360        # 绕完一圈终止
-        MAX_BLOCK_SEARCH = 6       # 方块丢失最多找回6次 (6×60°=360°)
-        OCR_CONFIRM_RETRY = 10     # OCR确认最多重试次数
-        ARC_TURN_PER_STEP = 15     # 每步弧线旋转角度（°）
+        self.log("[ORBIT] walk-around cuboid, scanning for text on each face...")
 
-        while total_rotate_deg < MAX_ORBIT_DEG:
-            # ---- 1. 弧线运动一小步（前进+左转） ----
-            self._show_frame()
-            self.drive_arc_left(speed=5, turn=ARC_TURN_PER_STEP, duration_ms=500)
-            total_rotate_deg += ARC_TURN_PER_STEP
-            self.log(f"  orbit {step:02d}: arc +{ARC_TURN_PER_STEP}°, total={total_rotate_deg:.0f}°")
-            time.sleep(0.3)
+        MAX_FACES = 4               # 立方体最多4个面
+        OCR_CONFIRM_RETRY = 10      # OCR确认最多重试次数
+        NEAR_AREA_THRESHOLD = 50000 # 太近时后退的面积阈值
 
-            # ---- 2. 停下，确认四方体在视野中 ----
-            self.drive_stop()
-            block = self.perception.detect_block()
+        # ---- 0. 如果太近方块，先后退 ----
+        block = self.perception.detect_block()
+        if block.found and block.area > NEAR_AREA_THRESHOLD:
+            self.log(f"  too close (area={block.area:.0f}), backing up 1.5s...")
+            self.drive_backward(speed=10, duration_ms=1500)
+            time.sleep(0.5)
+
+        for face_idx in range(MAX_FACES):
+            self.log(f"  === face {face_idx}/{MAX_FACES - 1} ===")
+
+            # ---- 1. 视觉找回并回正方块 ----
+            block = self._find_and_center_block(max_search=8)
             if not block.found:
-                self.log(f"  orbit {step:02d}: block lost, searching...")
-                search_count = 0
-                while search_count < MAX_BLOCK_SEARCH:
-                    self.drive_rotate_left(turn=60, duration_ms=400)
-                    total_rotate_deg += 60
-                    if total_rotate_deg >= MAX_ORBIT_DEG:
-                        self.log("[ORBIT] exceeded 360° during block search, aborting")
-                        return TaskResult(valid=False)
-                    rotate_end = time.time() + 0.7
-                    while time.time() < rotate_end:
-                        block = self.perception.detect_block()
-                        if block.found:
-                            self.drive_stop()
-                            break
-                        time.sleep(0.1)
-                    if block.found:
-                        break
-                    # 停下再搜5秒
-                    deadline = time.time() + 5.0
-                    while time.time() < deadline:
-                        block = self.perception.detect_block()
-                        self._show_frame()
-                        if block.found:
-                            break
-                        time.sleep(0.2)
-                    if block.found:
-                        break
-                    search_count += 1
-                    self.log(f"  block search attempt {search_count}/{MAX_BLOCK_SEARCH}")
-                if not block.found:
-                    self.log("[ORBIT] block not found after max search attempts")
-                    return TaskResult(valid=False)
-
-            # ---- 3. 径向回正：让四方体回到视野中央 ----
-            for _ in range(5):
-                error_x = block.center_x - 320
-                if abs(error_x) < 60:
-                    break
-                turn_deg = min(30, abs(error_x) // 4)
-                if error_x > 0:
-                    self.drive_rotate_right(turn=turn_deg, duration_ms=200)
-                else:
-                    self.drive_rotate_left(turn=turn_deg, duration_ms=200)
-                    total_rotate_deg += turn_deg
-                time.sleep(0.2)
-                block = self.perception.detect_block()
-                if not block.found:
-                    break
-
-            if total_rotate_deg >= MAX_ORBIT_DEG:
-                self.log("[ORBIT] completed 360° orbit without finding text")
+                self.log("[ORBIT] block lost and not recovered, aborting")
                 return TaskResult(valid=False)
 
-            # ---- 4. 扫文字：没白纸等3秒，有白纸最多等15秒 ----
-            self.log(f"  orbit {step:02d} ({total_rotate_deg:.0f}°): facing cuboid, checking for text...")
+            self.log(f"  face {face_idx}: cuboid centered (area={block.area:.0f}), scanning text...")
 
+            # ---- 2. 扫文字：没白纸等3秒，有白纸最多等15秒 ----
             text_found = False
+            result = None
             start = time.time()
             while True:
                 result = self.perception.read_task_text()
@@ -365,47 +370,51 @@ class MissionController:
                 elapsed = time.time() - start
                 if (not has_white and elapsed > 3) or (has_white and elapsed > 15):
                     if has_white and elapsed > 15:
-                        self.log("  orbit: OCR failed for 15s despite white paper, moving on")
+                        self.log(f"  face {face_idx}: OCR failed 15s despite white paper")
+                    else:
+                        self.log(f"  face {face_idx}: no white paper in 3s")
                     break
                 time.sleep(0.3)
 
-            if not text_found:
-                step += 1
-                continue
-
-            # ---- 5. OCR确认：最多重试 OCR_CONFIRM_RETRY 次 ----
-            self.drive_stop()
-            self.log(f"[TEXT] spotted: \"{result.label[:30]}\", stopping to OCR...")
-            time.sleep(0.5)
-            confirmed = False
-            for retry in range(1, OCR_CONFIRM_RETRY + 1):
-                result2 = self.perception.read_task_text()
-                if result2.found and result2.label:
-                    if _parse_task_text is not None:
-                        valid, pos, att = _parse_task_text(result2.label)
+            if text_found:
+                # ---- 3. OCR确认 ----
+                self.drive_stop()
+                self.log(f"[TEXT] spotted: \"{result.label[:30]}\", confirming...")
+                time.sleep(0.5)
+                for retry in range(1, OCR_CONFIRM_RETRY + 1):
+                    result2 = self.perception.read_task_text()
+                    if result2.found and result2.label:
+                        if _parse_task_text is not None:
+                            valid, pos, att = _parse_task_text(result2.label)
+                        else:
+                            valid = True
+                            import re
+                            pm = re.search(r"位置\s*([12])", result2.label)
+                            pos = int(pm.group(1)) if pm else 1
+                            att = ("chop" if "劈" in result2.label or "砍" in result2.label
+                                   or "chop" in result2.label.lower() else "stab")
+                        self.log(f"  confirm {retry}: valid={valid}, text=\"{result2.label[:30]}\"")
+                        if valid:
+                            self.log(f"[TASK] confirmed: position={pos}, attack={att}")
+                            return TaskResult(valid=True, position=pos, attack=att)
                     else:
-                        valid = True
-                        import re
-                        pm = re.search(r"位置\s*([12])", result2.label)
-                        pos = int(pm.group(1)) if pm else 1
-                        att = ("chop" if "劈" in result2.label or "砍" in result2.label
-                               or "chop" in result2.label.lower() else "stab")
-                    self.log(
-                        f"  confirm {retry}: valid={valid}, "
-                        f"text=\"{result2.label[:30]}\", pos={pos}, att={att}"
-                    )
-                    if valid:
-                        self.log(f"[TASK] confirmed: position={pos}, attack={att}")
-                        return TaskResult(valid=True, position=pos, attack=att)
-                else:
-                    if retry % 5 == 0:
-                        self.log(f"  confirm {retry}: waiting for OCR...")
+                        if retry % 5 == 0:
+                            self.log(f"  confirm {retry}: waiting for OCR...")
+                    time.sleep(0.5)
+                self.log(f"  OCR confirm failed, moving to next face")
+
+            # ---- 4. 没找到文字，绕到下一面 ----
+            if face_idx < MAX_FACES - 1:
+                self.log(f"  face {face_idx}: no text found, walking to next face...")
+                # 右转90° → 前进 → 左转90°（绕到立方体下一面）
+                self.drive_rotate_right(turn=500, duration_ms=700)
+                time.sleep(0.3)
+                self.drive_forward(speed=15, duration_ms=1500)
+                time.sleep(0.3)
+                self.drive_rotate_left(turn=500, duration_ms=700)
                 time.sleep(0.5)
 
-            self.log(f"  OCR confirm failed after {OCR_CONFIRM_RETRY} retries, continue orbit")
-            step += 1
-
-        self.log("[ORBIT] completed full 360° orbit without finding valid text")
+        self.log("[ORBIT] checked all 4 faces, no valid text found")
         return TaskResult(valid=False)
 
     # ------------------------------------------------------------------
@@ -414,16 +423,16 @@ class MissionController:
 
     def search_and_approach_qr(self, expected_position: int) -> bool:
         """
-        转 60° → 停 5 秒扫 QR。找到后直接验证。
+        旋转搜索 → 停 5 秒扫 QR。找到后直接验证。
         """
         self.log(f"[QR] searching for QR code, expected POS={expected_position}...")
         search_step = 0
 
         while True:
-            # 转 60°，途中也扫
-            self.log(f"  qr step {search_step:03d}: rotating 60°...")
-            rotate_end = time.time() + 0.7
-            self.drive_rotate_left(turn=60, duration_ms=400)
+            # 旋转搜索，途中也扫
+            self.log(f"  qr step {search_step:03d}: rotating...")
+            rotate_end = time.time() + 1.2
+            self.drive_rotate_left(turn=500, duration_ms=700)
             while time.time() < rotate_end:
                 result = self.perception.detect_qr()
                 self._show_frame()
