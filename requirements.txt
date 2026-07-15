@@ -1,18 +1,22 @@
 # ============================================================
 # 机器人任务控制系统 — Python 依赖
 # 在 Atlas 200I DK A2 (Ubuntu) 上执行:
+#   source /usr/local/Ascend/ascend-toolkit/set_env.sh
 #   pip3 install -r requirements.txt
 # ============================================================
 
-# 串口通信（与 Atlas / 机器人底盘通信）
+# 串口通信（与 Arduino 底盘通信）
 pyserial>=3.5
 
 # 视觉处理
 opencv-python>=4.8.0
 numpy>=1.24.0
 
-# OCR 文字识别（仅使用 EasyOCR）
+# OCR 文字识别（--yolo 模式下可跳过，但保留备用）
 easyocr>=1.7.0
 
-# 二维码/条形码扫描（备用方案，OpenCV 自带 QR 检测优先）
-# pyzbar>=0.1.9            # 需要系统安装 libzbar0
+# ----------------------------------------------------------
+# YOLOv5 NPU 推理依赖（pip 无法安装，由 CANN 提供）:
+#   acl (pyACL)  →  source /usr/local/Ascend/ascend-toolkit/set_env.sh
+# 如果 import acl 失败，请确认 CANN 已正确安装并在 PATH 中。
+# ----------------------------------------------------------

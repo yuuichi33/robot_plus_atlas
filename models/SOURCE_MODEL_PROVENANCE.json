@@ -1,0 +1,42 @@
+{
+  "schema_version": 1,
+  "selected_for_atlas_program": true,
+  "selection_policy": "explicit_user_override",
+  "selection_date": "2026-07-15",
+  "source_directory": "artifacts/task_yolov5n_diagnostic",
+  "source_release_status": "diagnostic_do_not_deploy",
+  "source_onnx": {
+    "file": "best.onnx",
+    "sha256": "43ba02b2451656b91bb7b2758c98a612d4c648ee9d49f63597c2b738a92f9bfe",
+    "input": {
+      "name": "images",
+      "shape": [1, 3, 640, 640],
+      "dtype": "float32"
+    },
+    "output": {
+      "name": "output0",
+      "shape": [1, 25200, 10],
+      "semantics": "xywh_objectness_class_probabilities"
+    }
+  },
+  "classes": ["NoTask", "Task1", "Task2", "Task3", "Task4"],
+  "operating_point": {
+    "confidence_threshold": 0.6,
+    "nms_iou_threshold": 0.45,
+    "nms_mode": "class_agnostic",
+    "max_detections": 20
+  },
+  "known_failed_gates": [
+    {
+      "gate": "Task4.recall",
+      "required": 0.8,
+      "observed": 0.7
+    }
+  ],
+  "known_limitations": [
+    "The deployment safety report records one Task prediction on a NoTask frame.",
+    "The supplied dataset contains no true empty-background negative samples.",
+    "The source release was diagnostic and did not pass every deployment gate.",
+    "The user explicitly selected this source model for the standalone Atlas recognizer despite those limitations."
+  ]
+}

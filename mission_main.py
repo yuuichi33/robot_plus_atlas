@@ -18,6 +18,18 @@ except ImportError:
     VisionPerception = None  # type: ignore
     _parse_task_text = None
 
+# YOLOv5 NPU 任务识别（可选，仅在 Atlas+CANN 环境下可用）
+try:
+    from atlas_task import AclBackend, AtlasTaskRecognizer
+    from yolo_task_reader import YoloTaskReader
+
+    _HAS_YOLO = True
+except ImportError:
+    _HAS_YOLO = False
+    AclBackend = None  # type: ignore
+    AtlasTaskRecognizer = None  # type: ignore
+    YoloTaskReader = None  # type: ignore
+
 
 class MissionState(Enum):
     INIT = "INIT"
@@ -515,6 +527,12 @@ def main() -> None:
     parser.add_argument("--display", action="store_true",
                         help="显示摄像头实时画面（需要图形界面）")
 
+    # ---- YOLOv5 NPU 参数 ----
+    parser.add_argument("--yolo", action="store_true",
+                        help="使用 YOLOv5 NPU 推理替代 EasyOCR 识别任务文字")
+    parser.add_argument("--yolo-model", default="models/task_yolov5n_fp16.om",
+                        help="YOLOv5 OM 模型路径（默认 models/task_yolov5n_fp16.om）")
+
     args = parser.parse_args()
 
     # ------- 创建机器人控制器 -------
@@ -527,6 +545,7 @@ def main() -> None:
     # ------- 创建感知模块 -------
     perception = None
     vision_obj = None  # 保持引用以便关闭
+    yolo_backend = None  # 保持引用以便关闭
 
     if args.vision or not args.dry_run:
         # 尝试使用真实视觉
@@ -543,6 +562,20 @@ def main() -> None:
             vision_obj.open()
             perception = vision_obj
             print(f"[VISION] real camera enabled: /dev/video{args.camera}")
+
+            # YOLOv5 NPU 模式：用 YOLO 分类替代 OCR 文字识别
+            if args.yolo:
+                if not _HAS_YOLO:
+                    print("[WARN] atlas_task/yolo_task_reader not available, "
+                          "falling back to EasyOCR")
+                else:
+                    print(f"[YOLO] loading model: {args.yolo_model}")
+                    yolo_backend = AclBackend(args.yolo_model, device_id=0)
+                    yolo_recognizer = AtlasTaskRecognizer(
+                        yolo_backend, confidence_threshold=0.60
+                    )
+                    perception = YoloTaskReader(vision_obj, yolo_recognizer)
+                    print("[YOLO] NPU task reader enabled (replacing EasyOCR)")
     else:
         perception = PerceptionStub(
             mock_position=args.mock_position,
@@ -564,6 +597,11 @@ def main() -> None:
     finally:
         if vision_obj is not None:
             vision_obj.close()
+        if yolo_backend is not None:
+            try:
+                yolo_backend.close()
+            except Exception:
+                pass
 
 
 if __name__ == "__main__":

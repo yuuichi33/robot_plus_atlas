@@ -1,0 +1,140 @@
+{
+  "schema_version": 1,
+  "pt_sha256": "69fb2ce9b79949e2465296c7472139b7075346c2209ec5a12d800efcabfdddef",
+  "onnx_sha256": "43ba02b2451656b91bb7b2758c98a612d4c648ee9d49f63597c2b738a92f9bfe",
+  "golden_contract": {
+    "root": "D:\\Homework\\robot\\Yolo\\artifacts\\golden_samples",
+    "annotations_sha256": "e8e901930ea56f1000b229bdfad9fe305e5610551e842aa6a923e08e82b2d708",
+    "checksums_sha256": "5adc7fd3c4554102bc81926416e88b4b19be44bae60d8c987b1b023f516c6509",
+    "dataset_contract": {
+      "dataset_yaml_sha256": "9876bd2ebfff73fabcd379b4b1f1d84bfc1ddd3c935a378e01e2e214db719dec",
+      "manifest_sha256": "ba303c06d5d14f632abcb931fcadfde8d865b76b3babf780524248e0618adeb2",
+      "dataset_report_sha256": "06f0f9e15f02ecec8b23c6950e82999f7a7a2556de7a16847a16bd7143aabcd4",
+      "contract_sha256": "c886d6f655fadf7193f2b75eabdee86d03e9c09a020c3505ff944384649c64b8"
+    }
+  },
+  "confidence_threshold": 0.25,
+  "summary": {
+    "sample_count": 5,
+    "matched_detection_count": 5,
+    "class_consistency": 1.0,
+    "minimum_matched_iou": 0.9999994909319712,
+    "maximum_confidence_difference": 8.344650268554688e-07
+  },
+  "gates": {
+    "passed": true,
+    "checks": {
+      "every_positive_sample_has_a_matched_detection": true,
+      "class_consistency_100_percent": true,
+      "minimum_matched_iou_at_least_0_99": true,
+      "maximum_confidence_difference_at_most_0_01": true
+    }
+  },
+  "samples": [
+    {
+      "image": "green_task_2_72.png",
+      "expected_class_id": 0,
+      "expected_label": "NoTask",
+      "pt_labels": [
+        "NoTask"
+      ],
+      "onnx_labels": [
+        "NoTask"
+      ],
+      "classes_match": true,
+      "expected_class_detected_by_both": true,
+      "matches": [
+        {
+          "class_id": 0,
+          "label": "NoTask",
+          "iou": 1.0,
+          "confidence_difference": 5.960464477539063e-08
+        }
+      ]
+    },
+    {
+      "image": "green_task_1_53.png",
+      "expected_class_id": 1,
+      "expected_label": "Task1",
+      "pt_labels": [
+        "Task1"
+      ],
+      "onnx_labels": [
+        "Task1"
+      ],
+      "classes_match": true,
+      "expected_class_detected_by_both": true,
+      "matches": [
+        {
+          "class_id": 1,
+          "label": "Task1",
+          "iou": 1.0,
+          "confidence_difference": 5.960464477539063e-08
+        }
+      ]
+    },
+    {
+      "image": "red_task_2_65.png",
+      "expected_class_id": 2,
+      "expected_label": "Task2",
+      "pt_labels": [
+        "Task2"
+      ],
+      "onnx_labels": [
+        "Task2"
+      ],
+      "classes_match": true,
+      "expected_class_detected_by_both": true,
+      "matches": [
+        {
+          "class_id": 2,
+          "label": "Task2",
+          "iou": 0.9999994909319712,
+          "confidence_difference": 1.1920928955078125e-07
+        }
+      ]
+    },
+    {
+      "image": "green_task_3_117.png",
+      "expected_class_id": 3,
+      "expected_label": "Task3",
+      "pt_labels": [
+        "Task3"
+      ],
+      "onnx_labels": [
+        "Task3"
+      ],
+      "classes_match": true,
+      "expected_class_detected_by_both": true,
+      "matches": [
+        {
+          "class_id": 3,
+          "label": "Task3",
+          "iou": 1.0,
+          "confidence_difference": 1.1920928955078125e-07
+        }
+      ]
+    },
+    {
+      "image": "green_task_4_17.png",
+      "expected_class_id": 4,
+      "expected_label": "Task4",
+      "pt_labels": [
+        "Task4"
+      ],
+      "onnx_labels": [
+        "Task4"
+      ],
+      "classes_match": true,
+      "expected_class_detected_by_both": true,
+      "matches": [
+        {
+          "class_id": 4,
+          "label": "Task4",
+          "iou": 1.0,
+          "confidence_difference": 8.344650268554688e-07
+        }
+      ]
+    }
+  ]
+}

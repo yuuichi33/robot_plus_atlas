@@ -1,0 +1,201 @@
+{
+  "schema_version": 1,
+  "task": "test",
+  "weights": "D:\\Homework\\robot\\Yolo\\runs\\train\\task_yolov5n\\weights\\best.pt",
+  "weights_sha256": "69fb2ce9b79949e2465296c7472139b7075346c2209ec5a12d800efcabfdddef",
+  "dataset_yaml": "D:\\Homework\\robot\\Yolo\\yolo_dataset\\dataset.yaml",
+  "dataset_yaml_sha256": "9876bd2ebfff73fabcd379b4b1f1d84bfc1ddd3c935a378e01e2e214db719dec",
+  "dataset_contract": {
+    "dataset_yaml_sha256": "9876bd2ebfff73fabcd379b4b1f1d84bfc1ddd3c935a378e01e2e214db719dec",
+    "manifest_sha256": "ba303c06d5d14f632abcb931fcadfde8d865b76b3babf780524248e0618adeb2",
+    "dataset_report_sha256": "06f0f9e15f02ecec8b23c6950e82999f7a7a2556de7a16847a16bd7143aabcd4",
+    "contract_sha256": "c886d6f655fadf7193f2b75eabdee86d03e9c09a020c3505ff944384649c64b8"
+  },
+  "run_record": {
+    "command": [
+      "val.run",
+      "D:\\Homework\\robot\\Yolo\\runs\\train\\task_yolov5n\\weights\\best.pt",
+      "test"
+    ],
+    "cwd": "D:\\Homework\\robot\\Yolo",
+    "python_executable": "D:\\Homework\\robot\\Yolo\\.venv\\Scripts\\python.exe",
+    "python_version": "3.12.10",
+    "platform": "Windows-11-10.0.26200-SP0",
+    "yolov5_commit": "915bbf294bb74c859f0b41f1c23bc395014ea679",
+    "yolov5_tree": "c54a6d586927aea25e80574e1e54ea0534ef679d",
+    "versions": {
+      "torch": "2.5.1+cpu",
+      "numpy": "1.26.4",
+      "opencv": "4.10.0"
+    },
+    "weights_sha256": "69fb2ce9b79949e2465296c7472139b7075346c2209ec5a12d800efcabfdddef",
+    "dataset_contract": {
+      "dataset_yaml_sha256": "9876bd2ebfff73fabcd379b4b1f1d84bfc1ddd3c935a378e01e2e214db719dec",
+      "manifest_sha256": "ba303c06d5d14f632abcb931fcadfde8d865b76b3babf780524248e0618adeb2",
+      "dataset_report_sha256": "06f0f9e15f02ecec8b23c6950e82999f7a7a2556de7a16847a16bd7143aabcd4",
+      "contract_sha256": "c886d6f655fadf7193f2b75eabdee86d03e9c09a020c3505ff944384649c64b8"
+    },
+    "output": "D:\\Homework\\robot\\Yolo\\runs\\val\\task_yolov5n_test"
+  },
+  "evaluation": {
+    "confidence_threshold": 0.001,
+    "nms_iou_threshold": 0.6,
+    "max_detections": 20,
+    "nms_mode": "YOLOv5 stock class-aware NMS",
+    "global": {
+      "precision": 0.9746812425179897,
+      "recall": 0.9186138740049266,
+      "map50": 0.9658148148148149,
+      "map50_95": 0.7589443707755981
+    },
+    "per_class": [
+      {
+        "class_id": 0,
+        "label": "NoTask",
+        "instances": 40,
+        "precision": 1.0,
+        "recall": 0.8944425811029924,
+        "f1": 0.9442804865399776,
+        "ap50": 0.995,
+        "map50_95": 0.8353552382226018,
+        "gates": {
+          "ap50": true,
+          "recall": true,
+          "precision": true
+        }
+      },
+      {
+        "class_id": 1,
+        "label": "Task1",
+        "instances": 11,
+        "precision": 0.9219551323347885,
+        "recall": 1.0,
+        "f1": 0.9593929814738169,
+        "ap50": 0.995,
+        "map50_95": 0.8095771981004072,
+        "gates": {
+          "ap50": true,
+          "recall": true,
+          "precision": true
+        }
+      },
+      {
+        "class_id": 2,
+        "label": "Task2",
+        "instances": 7,
+        "precision": 0.9661120675521502,
+        "recall": 1.0,
+        "f1": 0.982763987360069,
+        "ap50": 0.995,
+        "map50_95": 0.7463276658576052,
+        "gates": {
+          "ap50": true,
+          "recall": true,
+          "precision": true
+        }
+      },
+      {
+        "class_id": 3,
+        "label": "Task3",
+        "instances": 14,
+        "precision": 1.0,
+        "recall": 0.9986267889216407,
+        "f1": 0.999312922709747,
+        "ap50": 0.995,
+        "map50_95": 0.758634330044955,
+        "gates": {
+          "ap50": true,
+          "recall": true,
+          "precision": true
+        }
+      },
+      {
+        "class_id": 4,
+        "label": "Task4",
+        "instances": 10,
+        "precision": 0.98533901270301,
+        "recall": 0.7,
+        "f1": 0.8185146177633192,
+        "ap50": 0.849074074074074,
+        "map50_95": 0.6448274216524216,
+        "gates": {
+          "ap50": true,
+          "recall": false,
+          "precision": true
+        }
+      }
+    ],
+    "confusion_matrix": [
+      [
+        40.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      [
+        0.0,
+        11.0,
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      [
+        0.0,
+        0.0,
+        7.0,
+        0.0,
+        3.0,
+        1.0
+      ],
+      [
+        0.0,
+        0.0,
+        0.0,
+        14.0,
+        0.0,
+        2.0
+      ],
+      [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        7.0,
+        0.0
+      ],
+      [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ]
+    ],
+    "timing_ms_per_image": [
+      0.5705850880320479,
+      36.4983576100047,
+      0.8135161748746546
+    ]
+  },
+  "gates": {
+    "thresholds": {
+      "global_map50_min": 0.85,
+      "per_class_ap50_min": 0.75,
+      "per_class_recall_min": 0.8,
+      "task_class_precision_min": 0.9
+    },
+    "passed": false,
+    "failures": [
+      "Task4.recall"
+    ]
+  },
+  "notes": [
+    "Precision/recall are the YOLOv5 best-F1 operating point values.",
+    "The fixed action threshold 0.60 and class-agnostic deployment NMS need a separate safety test.",
+    "Use val for architecture selection and test only for the final selected model."
+  ]
+}

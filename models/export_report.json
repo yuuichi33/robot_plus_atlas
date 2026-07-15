@@ -1,0 +1,82 @@
+{
+  "source_weights": "D:\\Homework\\robot\\Yolo\\runs\\train\\task_yolov5n\\weights\\best.pt",
+  "source_weights_sha256": "69fb2ce9b79949e2465296c7472139b7075346c2209ec5a12d800efcabfdddef",
+  "training_opt": "D:\\Homework\\robot\\Yolo\\runs\\train\\task_yolov5n\\opt.yaml",
+  "training_opt_sha256": "b16ec971986195379b45e07c9f9880259deffcaa2ac27396e6df20ef47217ec9",
+  "training_completion": null,
+  "training_completion_sha256": null,
+  "dataset_yaml": "D:\\Homework\\robot\\Yolo\\yolo_dataset\\dataset.yaml",
+  "dataset_contract": {
+    "dataset_yaml_sha256": "9876bd2ebfff73fabcd379b4b1f1d84bfc1ddd3c935a378e01e2e214db719dec",
+    "manifest_sha256": "ba303c06d5d14f632abcb931fcadfde8d865b76b3babf780524248e0618adeb2",
+    "dataset_report_sha256": "06f0f9e15f02ecec8b23c6950e82999f7a7a2556de7a16847a16bd7143aabcd4",
+    "contract_sha256": "c886d6f655fadf7193f2b75eabdee86d03e9c09a020c3505ff944384649c64b8"
+  },
+  "contract": {
+    "opsets": {
+      "ai.onnx": 11
+    },
+    "input": {
+      "name": "images",
+      "shape": [
+        1,
+        3,
+        640,
+        640
+      ],
+      "dtype": "float32"
+    },
+    "output": {
+      "name": "output0",
+      "shape": [
+        1,
+        25200,
+        10
+      ],
+      "dtype": "float32"
+    },
+    "embedded_nms": false,
+    "onnxruntime_providers": [
+      "CPUExecutionProvider"
+    ]
+  },
+  "evaluation_report": "D:\\Homework\\robot\\Yolo\\runs\\val\\task_yolov5n_test\\evaluation_report.json",
+  "evaluation_report_sha256": "5bc5d4314deff3af8bc94617577ce0638bd35afa0e576da8851ffb80df940904",
+  "evaluation_gates_passed": false,
+  "deployment_safety_report": "D:\\Homework\\robot\\Yolo\\runs\\val\\task_yolov5n_deployment_safety\\deployment_safety_report.json",
+  "deployment_safety_report_sha256": "5474b545de02c351283d1eb9f2c2b8ef94c3e4e570002cb9094bf789e6d1f675",
+  "deployment_safety_gates_passed": false,
+  "parity_report_sha256": "3ea0b9e74be9e6de4af4daa0c0f0128f080d79df302345aecc5c979ec031916c",
+  "parity_gates_passed": true,
+  "release_status": "diagnostic_do_not_deploy",
+  "environment": {
+    "command": [
+      "D:\\Homework\\robot\\Yolo\\.venv\\Scripts\\python.exe",
+      "D:\\Homework\\robot\\Yolo\\third_party\\yolov5\\export.py",
+      "--weights",
+      "D:\\Homework\\robot\\Yolo\\generated\\export_work\\best_d4wp0khs\\best.pt",
+      "--include",
+      "onnx",
+      "--imgsz",
+      "640",
+      "640",
+      "--batch-size",
+      "1",
+      "--device",
+      "cpu",
+      "--opset",
+      "11"
+    ],
+    "cwd": "D:\\Homework\\robot\\Yolo",
+    "python_executable": "D:\\Homework\\robot\\Yolo\\.venv\\Scripts\\python.exe",
+    "python_version": "3.12.10",
+    "platform": "Windows-11-10.0.26200-SP0",
+    "yolov5_commit": "915bbf294bb74c859f0b41f1c23bc395014ea679",
+    "yolov5_tree": "c54a6d586927aea25e80574e1e54ea0534ef679d",
+    "versions": {
+      "torch": "2.5.1+cpu",
+      "numpy": "1.26.4",
+      "opencv": "4.10.0"
+    }
+  }
+}

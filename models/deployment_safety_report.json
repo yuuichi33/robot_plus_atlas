@@ -1,0 +1,1881 @@
+{
+  "schema_version": 1,
+  "task": "test_deployment_safety",
+  "weights": "D:\\Homework\\robot\\Yolo\\runs\\train\\task_yolov5n\\weights\\best.pt",
+  "weights_sha256": "69fb2ce9b79949e2465296c7472139b7075346c2209ec5a12d800efcabfdddef",
+  "dataset_yaml": "D:\\Homework\\robot\\Yolo\\yolo_dataset\\dataset.yaml",
+  "dataset_contract": {
+    "dataset_yaml_sha256": "9876bd2ebfff73fabcd379b4b1f1d84bfc1ddd3c935a378e01e2e214db719dec",
+    "manifest_sha256": "ba303c06d5d14f632abcb931fcadfde8d865b76b3babf780524248e0618adeb2",
+    "dataset_report_sha256": "06f0f9e15f02ecec8b23c6950e82999f7a7a2556de7a16847a16bd7143aabcd4",
+    "contract_sha256": "c886d6f655fadf7193f2b75eabdee86d03e9c09a020c3505ff944384649c64b8"
+  },
+  "run_record": {
+    "command": [
+      "deployment-evaluation",
+      "D:\\Homework\\robot\\Yolo\\runs\\train\\task_yolov5n\\weights\\best.pt"
+    ],
+    "cwd": "D:\\Homework\\robot\\Yolo",
+    "python_executable": "D:\\Homework\\robot\\Yolo\\.venv\\Scripts\\python.exe",
+    "python_version": "3.12.10",
+    "platform": "Windows-11-10.0.26200-SP0",
+    "yolov5_commit": "915bbf294bb74c859f0b41f1c23bc395014ea679",
+    "yolov5_tree": "c54a6d586927aea25e80574e1e54ea0534ef679d",
+    "versions": {
+      "torch": "2.5.1+cpu",
+      "numpy": "1.26.4",
+      "opencv": "4.10.0"
+    },
+    "weights_sha256": "69fb2ce9b79949e2465296c7472139b7075346c2209ec5a12d800efcabfdddef",
+    "dataset_contract": {
+      "dataset_yaml_sha256": "9876bd2ebfff73fabcd379b4b1f1d84bfc1ddd3c935a378e01e2e214db719dec",
+      "manifest_sha256": "ba303c06d5d14f632abcb931fcadfde8d865b76b3babf780524248e0618adeb2",
+      "dataset_report_sha256": "06f0f9e15f02ecec8b23c6950e82999f7a7a2556de7a16847a16bd7143aabcd4",
+      "contract_sha256": "c886d6f655fadf7193f2b75eabdee86d03e9c09a020c3505ff944384649c64b8"
+    },
+    "output": "D:\\Homework\\robot\\Yolo\\runs\\val\\task_yolov5n_deployment_safety"
+  },
+  "operating_point": {
+    "confidence_threshold": 0.6,
+    "nms_iou_threshold": 0.45,
+    "nms_mode": "class-agnostic",
+    "max_detections": 20,
+    "matching_iou_threshold": 0.5
+  },
+  "summary": {
+    "sample_count": 82,
+    "conflicting_task_label_frames": 0,
+    "task_predictions_on_NoTask_frames": 1,
+    "mean_inference_ms": 85.38307560968128,
+    "p95_inference_ms": 96.30687000008038
+  },
+  "per_class": [
+    {
+      "class_id": 0,
+      "label": "NoTask",
+      "tp": 37,
+      "fp": 0,
+      "fn": 3,
+      "precision": 1.0,
+      "recall": 0.925,
+      "f1": 0.961038961038961,
+      "gates": {
+        "recall": true,
+        "precision": true
+      }
+    },
+    {
+      "class_id": 1,
+      "label": "Task1",
+      "tp": 11,
+      "fp": 1,
+      "fn": 0,
+      "precision": 0.9166666666666666,
+      "recall": 1.0,
+      "f1": 0.9565217391304348,
+      "gates": {
+        "recall": true,
+        "precision": true
+      }
+    },
+    {
+      "class_id": 2,
+      "label": "Task2",
+      "tp": 7,
+      "fp": 0,
+      "fn": 0,
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1": 1.0,
+      "gates": {
+        "recall": true,
+        "precision": true
+      }
+    },
+    {
+      "class_id": 3,
+      "label": "Task3",
+      "tp": 14,
+      "fp": 0,
+      "fn": 0,
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1": 1.0,
+      "gates": {
+        "recall": true,
+        "precision": true
+      }
+    },
+    {
+      "class_id": 4,
+      "label": "Task4",
+      "tp": 7,
+      "fp": 0,
+      "fn": 3,
+      "precision": 1.0,
+      "recall": 0.7,
+      "f1": 0.8235294117647058,
+      "gates": {
+        "recall": false,
+        "precision": true
+      }
+    }
+  ],
+  "gates": {
+    "thresholds": {
+      "per_class_recall_min": 0.8,
+      "task_class_precision_min": 0.9
+    },
+    "passed": false,
+    "failures": [
+      "Task4.recall"
+    ]
+  },
+  "limitations": [
+    "The supplied dataset has no true empty-background negatives.",
+    "Temporal 3-of-5 action voting and robot STOP behavior require recorded-scene and hardware tests."
+  ],
+  "samples": [
+    {
+      "image": "green_task_1_50.png",
+      "expected_class_id": 1,
+      "expected_label": "Task1",
+      "matched": true,
+      "predictions": [
+        {
+          "class_id": 1,
+          "label": "Task1",
+          "confidence": 0.9024365544319153,
+          "xyxy": [
+            752.4434204101562,
+            676.9713745117188,
+            1072.906005859375,
+            1035.1943359375
+          ]
+        }
+      ],
+      "conflicting_task_labels": false,
+      "task_labels": [
+        "Task1"
+      ]
+    },
+    {
+      "image": "green_task_1_51.png",
+      "expected_class_id": 1,
+      "expected_label": "Task1",
+      "matched": true,
+      "predictions": [
+        {
+          "class_id": 1,
+          "label": "Task1",
+          "confidence": 0.9035117030143738,
+          "xyxy": [
+            698.1818237304688,
+            680.1007690429688,
+            1031.079345703125,
+            1051.30859375
+          ]
+        }
+      ],
+      "conflicting_task_labels": false,
+      "task_labels": [
+        "Task1"
+      ]
+    },
+    {
+      "image": "green_task_1_52.png",
+      "expected_class_id": 1,
+      "expected_label": "Task1",
+      "matched": true,
+      "predictions": [
+        {
+          "class_id": 1,
+          "label": "Task1",
+          "confidence": 0.8782069087028503,
+          "xyxy": [
+            653.8705444335938,
+            686.2342529296875,
+            989.119140625,
+            1062.7734375
+          ]
+        }
+      ],
+      "conflicting_task_labels": false,
+      "task_labels": [
+        "Task1"
+      ]
+    },
+    {
+      "image": "green_task_1_53.png",
+      "expected_class_id": 1,
+      "expected_label": "Task1",
+      "matched": true,
+      "predictions": [
+        {
+          "class_id": 1,
+          "label": "Task1",
+          "confidence": 0.9338326454162598,
+          "xyxy": [
+            609.7238159179688,
+            683.4479370117188,
+            959.7310180664062,
+            1077.4427490234375
+          ]
+        }
+      ],
+      "conflicting_task_labels": false,
+      "task_labels": [
+        "Task1"
+      ]
+    },
+    {
+      "image": "green_task_1_54.png",
+      "expected_class_id": 1,
+      "expected_label": "Task1",
+      "matched": true,
+      "predictions": [
+        {
+          "class_id": 1,
+          "label": "Task1",
+          "confidence": 0.9248127341270447,
+          "xyxy": [
+            617.9685668945312,
+            686.6936645507812,
+            976.2838134765625,
+            1080.0
+          ]
+        }
+      ],
+      "conflicting_task_labels": false,
+      "task_labels": [
+        "Task1"
+      ]
+    },
+    {
+      "image": "green_task_1_55.png",
+      "expected_class_id": 1,
+      "expected_label": "Task1",
+      "matched": true,
+      "predictions": [
+        {
+          "class_id": 1,
+          "label": "Task1",
+          "confidence": 0.8975762724876404,
+          "xyxy": [
+            633.2413330078125,
+            687.3832397460938,
+            986.5380859375,
+            1080.0
+          ]
+        }
+      ],
+      "conflicting_task_labels": false,
+      "task_labels": [
+        "Task1"
+      ]
+    },
+    {
+      "image": "green_task_1_56.png",
+      "expected_class_id": 1,
+      "expected_label": "Task1",
+      "matched": true,
+      "predictions": [
+        {
+          "class_id": 1,
+          "label": "Task1",
+          "confidence": 0.9224001169204712,
+          "xyxy": [
+            609.1021118164062,
+            688.4551391601562,
+            949.5935668945312,
+            1080.0
+          ]
+        }
+      ],
+      "conflicting_task_labels": false,
+      "task_labels": [
+        "Task1"
+      ]
+    },
+    {
+      "image": "green_task_2_71.png",
+      "expected_class_id": 0,
+      "expected_label": "NoTask",
+      "matched": true,
+      "predictions": [
+        {
+          "class_id": 0,
+          "label": "NoTask",
+          "confidence": 0.8509054780006409,
+          "xyxy": [
+            843.44775390625,
+            523.0858764648438,
+            1072.3270263671875,
+            777.268310546875
+          ]
+        }
+      ],
+      "conflicting_task_labels": false,
+      "task_labels": []
+    },
+    {
+      "image": "green_task_2_72.png",
+      "expected_class_id": 0,
+      "expected_label": "NoTask",
+      "matched": true,
+      "predictions": [
+        {
+          "class_id": 0,
+          "label": "NoTask",
+          "confidence": 0.8911207914352417,
+          "xyxy": [
+            1027.4351806640625,
+            529.084228515625,
+            1340.290771484375,
+            850.3316040039062
+          ]
+        }
+      ],
+      "conflicting_task_labels": false,
+      "task_labels": []
+    },
+    {
+      "image": "green_task_2_73.png",
+      "expected_class_id": 0,
+      "expected_label": "NoTask",
+      "matched": true,
+      "predictions": [
+        {
+          "class_id": 0,
+          "label": "NoTask",
+          "confidence": 0.8723655939102173,
+          "xyxy": [
+            600.2393188476562,
+            513.2569580078125,
+            886.2178344726562,
+            800.8689575195312
+          ]
+        }
+      ],
+      "conflicting_task_labels": false,
+      "task_labels": []
+    },
+    {
+      "image": "green_task_2_74.png",
+      "expected_class_id": 2,
+      "expected_label": "Task2",
+      "matched": true,
+      "predictions": [
+        {
+          "class_id": 2,
+          "label": "Task2",
+          "confidence": 0.8511303067207336,
+          "xyxy": [
+            1360.1171875,
+            629.5770263671875,
+            1515.4588623046875,
+            894.7619018554688
+          ]
+        }
+      ],
+      "conflicting_task_labels": false,
+      "task_labels": [
+        "Task2"
+      ]
+    },
+    {
+      "image": "green_task_2_75.png",
+      "expected_class_id": 2,
+      "expected_label": "Task2",
+      "matched": true,
+      "predictions": [
+        {
+          "class_id": 2,
+          "label": "Task2",
+          "confidence": 0.8611896634101868,
+          "xyxy": [
+            1099.418701171875,
+            590.2039184570312,
+            1273.3900146484375,
+            755.3681640625
+          ]
+        }
+      ],
+      "conflicting_task_labels": false,
+      "task_labels": [
+        "Task2"
+      ]
+    },
+    {
+      "image": "green_task_2_76.png",
+      "expected_class_id": 2,
+      "expected_label": "Task2",
+      "matched": true,
+      "predictions": [
+        {
+          "class_id": 2,
+          "label": "Task2",
+          "confidence": 0.736394464969635,
+          "xyxy": [
+            884.0989990234375,
+            562.8067626953125,
+            984.5999145507812,
+            735.0901489257812
+          ]
+        }
+      ],
+      "conflicting_task_labels": false,
+      "task_labels": [
+        "Task2"
+      ]
+    },
+    {
+      "image": "green_task_2_77.png",
+      "expected_class_id": 0,
+      "expected_label": "NoTask",
+      "matched": true,
+      "predictions": [
+        {
+          "class_id": 0,
+          "label": "NoTask",
+          "confidence": 0.8518341779708862,
+          "xyxy": [
+            1140.35791015625,
+            537.7595825195312,
+            1447.76123046875,
+            830.0535888671875
+          ]
+        }
+      ],
+      "conflicting_task_labels": false,
+      "task_labels": []
+    },
+    {
+      "image": "green_task_2_78.png",
+      "expected_class_id": 0,
+      "expected_label": "NoTask",
+      "matched": true,
+      "predictions": [
+        {
+          "class_id": 0,
+          "label": "NoTask",
+          "confidence": 0.8675033450126648,
+          "xyxy": [
+            1358.7506103515625,
+            550.160888671875,
+            1713.8115234375,
+            866.9569702148438
+          ]
+        }
+      ],
+      "conflicting_task_labels": false,
+      "task_labels": []
+    },
+    {
+      "image": "green_task_2_79.png",
+      "expected_class_id": 0,
+      "expected_label": "NoTask",
+      "matched": true,
+      "predictions": [
+        {
+          "class_id": 0,
+          "label": "NoTask",
+          "confidence": 0.8834999799728394,
+          "xyxy": [
+            1313.59326171875,
+            554.001953125,
+            1532.5067138671875,
+            771.767822265625
+          ]
+        }
+      ],
+      "conflicting_task_labels": false,
+      "task_labels": []
+    },
+    {
+      "image": "green_task_2_80.png",
+      "expected_class_id": 0,
+      "expected_label": "NoTask",
+      "matched": true,
+      "predictions": [
+        {
+          "class_id": 0,
+          "label": "NoTask",
+          "confidence": 0.8874680995941162,
+          "xyxy": [
+            808.5911865234375,
+            527.16064453125,
+            983.8580932617188,
+            739.3663330078125
+          ]
+        }
+      ],
+      "conflicting_task_labels": false,
+      "task_labels": []
+    },
+    {
+      "image": "green_task_3_111.png",
+      "expected_class_id": 3,
+      "expected_label": "Task3",
+      "matched": true,
+      "predictions": [
+        {
+          "class_id": 3,
+          "label": "Task3",
+          "confidence": 0.8539916276931763,
+          "xyxy": [
+            801.1527099609375,
+            544.5439453125,
+            953.677001953125,
+            742.1473388671875
+          ]
+        }
+      ],
+      "conflicting_task_labels": false,
+      "task_labels": [
+        "Task3"
+      ]
+    },
+    {
+      "image": "green_task_3_112.png",
+      "expected_class_id": 3,
+      "expected_label": "Task3",
+      "matched": true,
+      "predictions": [
+        {
+          "class_id": 3,
+          "label": "Task3",
+          "confidence": 0.8680533170700073,
+          "xyxy": [
+            813.2997436523438,
+            540.8051147460938,
+            979.54248046875,
+            742.4060668945312
+          ]
+        }
+      ],
+      "conflicting_task_labels": false,
+      "task_labels": [
+        "Task3"
+      ]
+    },
+    {
+      "image": "green_task_3_113.png",
+      "expected_class_id": 3,
+      "expected_label": "Task3",
+      "matched": true,
+      "predictions": [
+        {
+          "class_id": 3,
+          "label": "Task3",
+          "confidence": 0.870047926902771,
+          "xyxy": [
+            813.003173828125,
+            538.6583862304688,
+            980.6133422851562,
+            744.2025146484375
+          ]
+        }
+      ],
+      "conflicting_task_labels": false,
+      "task_labels": [
+        "Task3"
+      ]
+    },
+    {
+      "image": "green_task_3_114.png",
+      "expected_class_id": 3,
+      "expected_label": "Task3",
+      "matched": true,
+      "predictions": [
+        {
+          "class_id": 3,
+          "label": "Task3",
+          "confidence": 0.8693299293518066,
+          "xyxy": [
+            813.16259765625,
+            538.3138427734375,
+            980.3115234375,
+            743.2286376953125
+          ]
+        }
+      ],
+      "conflicting_task_labels": false,
+      "task_labels": [
+        "Task3"
+      ]
+    },
+    {
+      "image": "green_task_3_115.png",
+      "expected_class_id": 3,
+      "expected_label": "Task3",
+      "matched": true,
+      "predictions": [
+        {
+          "class_id": 3,
+          "label": "Task3",
+          "confidence": 0.8586304783821106,
+          "xyxy": [
+            823.7682495117188,
+            538.2968139648438,
+            1020.6060791015625,
+            746.5990600585938
+          ]
+        }
+      ],
+      "conflicting_task_labels": false,
+      "task_labels": [
+        "Task3"
+      ]
+    },
+    {
+      "image": "green_task_3_116.png",
+      "expected_class_id": 3,
+      "expected_label": "Task3",
+      "matched": true,
+      "predictions": [
+        {
+          "class_id": 3,
+          "label": "Task3",
+          "confidence": 0.8720163702964783,
+          "xyxy": [
+            841.4644775390625,
+            534.6971435546875,
+            1040.835205078125,
+            746.2738647460938
+          ]
+        }
+      ],
+      "conflicting_task_labels": false,
+      "task_labels": [
+        "Task3"
+      ]
+    },
+    {
+      "image": "green_task_3_117.png",
+      "expected_class_id": 3,
+      "expected_label": "Task3",
+      "matched": true,
+      "predictions": [
+        {
+          "class_id": 3,
+          "label": "Task3",
+          "confidence": 0.8272285461425781,
+          "xyxy": [
+            900.061767578125,
+            536.1677856445312,
+            1048.54638671875,
+            741.7842407226562
+          ]
+        }
+      ],
+      "conflicting_task_labels": false,
+      "task_labels": [
+        "Task3"
+      ]
+    },
+    {
+      "image": "green_task_3_118.png",
+      "expected_class_id": 3,
+      "expected_label": "Task3",
+      "matched": true,
+      "predictions": [
+        {
+          "class_id": 3,
+          "label": "Task3",
+          "confidence": 0.704460859298706,
+          "xyxy": [
+            936.0811157226562,
+            540.1659545898438,
+            1021.0365600585938,
+            730.1404418945312
+          ]
+        }
+      ],
+      "conflicting_task_labels": false,
+      "task_labels": [
+        "Task3"
+      ]
+    },
+    {
+      "image": "green_task_3_119.png",
+      "expected_class_id": 0,
+      "expected_label": "NoTask",
+      "matched": true,
+      "predictions": [
+        {
+          "class_id": 0,
+          "label": "NoTask",
+          "confidence": 0.6247664093971252,
+          "xyxy": [
+            737.75244140625,
+            484.1794738769531,
+            1016.3829345703125,
+            767.4115600585938
+          ]
+        }
+      ],
+      "conflicting_task_labels": false,
+      "task_labels": []
+    },
+    {
+      "image": "green_task_3_120.png",
+      "expected_class_id": 0,
+      "expected_label": "NoTask",
+      "matched": true,
+      "predictions": [
+        {
+          "class_id": 0,
+          "label": "NoTask",
+          "confidence": 0.775719940662384,
+          "xyxy": [
+            738.8060302734375,
+            484.63568115234375,
+            1017.5560913085938,
+            766.8550415039062
+          ]
+        }
+      ],
+      "conflicting_task_labels": false,
+      "task_labels": []
+    },
+    {
+      "image": "green_task_3_121.png",
+      "expected_class_id": 0,
+      "expected_label": "NoTask",
+      "matched": true,
+      "predictions": [
+        {
+          "class_id": 0,
+          "label": "NoTask",
+          "confidence": 0.8689596652984619,
+          "xyxy": [
+            765.2279663085938,
+            481.2680969238281,
+            999.4140014648438,
+            752.6572875976562
+          ]
+        }
+      ],
+      "conflicting_task_labels": false,
+      "task_labels": []
+    },
+    {
+      "image": "green_task_3_122.png",
+      "expected_class_id": 0,
+      "expected_label": "NoTask",
+      "matched": true,
+      "predictions": [
+        {
+          "class_id": 0,
+          "label": "NoTask",
+          "confidence": 0.8502485156059265,
+          "xyxy": [
+            786.48876953125,
+            479.2270202636719,
+            1006.355224609375,
+            746.0083618164062
+          ]
+        }
+      ],
+      "conflicting_task_labels": false,
+      "task_labels": []
+    },
+    {
+      "image": "green_task_3_123.png",
+      "expected_class_id": 0,
+      "expected_label": "NoTask",
+      "matched": true,
+      "predictions": [
+        {
+          "class_id": 0,
+          "label": "NoTask",
+          "confidence": 0.8580204844474792,
+          "xyxy": [
+            803.8334350585938,
+            482.766357421875,
+            1009.09228515625,
+            742.79443359375
+          ]
+        }
+      ],
+      "conflicting_task_labels": false,
+      "task_labels": []
+    },
+    {
+      "image": "green_task_3_124.png",
+      "expected_class_id": 0,
+      "expected_label": "NoTask",
+      "matched": true,
+      "predictions": [
+        {
+          "class_id": 0,
+          "label": "NoTask",
+          "confidence": 0.8568563461303711,
+          "xyxy": [
+            805.6554565429688,
+            482.69677734375,
+            1008.8580322265625,
+            736.5422973632812
+          ]
+        }
+      ],
+      "conflicting_task_labels": false,
+      "task_labels": []
+    },
+    {
+      "image": "green_task_3_125.png",
+      "expected_class_id": 0,
+      "expected_label": "NoTask",
+      "matched": true,
+      "predictions": [
+        {
+          "class_id": 0,
+          "label": "NoTask",
+          "confidence": 0.8476969599723816,
+          "xyxy": [
+            804.7330322265625,
+            483.0574035644531,
+            1003.236572265625,
+            727.138427734375
+          ]
+        }
+      ],
+      "conflicting_task_labels": false,
+      "task_labels": []
+    },
+    {
+      "image": "green_task_4_11.png",
+      "expected_class_id": 4,
+      "expected_label": "Task4",
+      "matched": true,
+      "predictions": [
+        {
+          "class_id": 4,
+          "label": "Task4",
+          "confidence": 0.845572292804718,
+          "xyxy": [
+            953.8491821289062,
+            581.0755004882812,
+            1254.1065673828125,
+            964.02978515625
+          ]
+        }
+      ],
+      "conflicting_task_labels": false,
+      "task_labels": [
+        "Task4"
+      ]
+    },
+    {
+      "image": "green_task_4_12.png",
+      "expected_class_id": 4,
+      "expected_label": "Task4",
+      "matched": true,
+      "predictions": [
+        {
+          "class_id": 4,
+          "label": "Task4",
+          "confidence": 0.845572292804718,
+          "xyxy": [
+            953.8491821289062,
+            581.0755004882812,
+            1254.1065673828125,
+            964.02978515625
+          ]
+        }
+      ],
+      "conflicting_task_labels": false,
+      "task_labels": [
+        "Task4"
+      ]
+    },
+    {
+      "image": "green_task_4_13.png",
+      "expected_class_id": 0,
+      "expected_label": "NoTask",
+      "matched": true,
+      "predictions": [
+        {
+          "class_id": 0,
+          "label": "NoTask",
+          "confidence": 0.6797484755516052,
+          "xyxy": [
+            784.7777709960938,
+            465.3489990234375,
+            1251.7750244140625,
+            1018.4448852539062
+          ]
+        }
+      ],
+      "conflicting_task_labels": false,
+      "task_labels": []
+    },
+    {
+      "image": "green_task_4_14.png",
+      "expected_class_id": 0,
+      "expected_label": "NoTask",
+      "matched": true,
+      "predictions": [
+        {
+          "class_id": 0,
+          "label": "NoTask",
+          "confidence": 0.8517002463340759,
+          "xyxy": [
+            736.6552734375,
+            482.11651611328125,
+            1223.74267578125,
+            1031.6434326171875
+          ]
+        }
+      ],
+      "conflicting_task_labels": false,
+      "task_labels": []
+    },
+    {
+      "image": "green_task_4_15.png",
+      "expected_class_id": 0,
+      "expected_label": "NoTask",
+      "matched": true,
+      "predictions": [
+        {
+          "class_id": 0,
+          "label": "NoTask",
+          "confidence": 0.846777081489563,
+          "xyxy": [
+            725.0947875976562,
+            481.45147705078125,
+            1230.5137939453125,
+            1045.2430419921875
+          ]
+        }
+      ],
+      "conflicting_task_labels": false,
+      "task_labels": []
+    },
+    {
+      "image": "green_task_4_16.png",
+      "expected_class_id": 4,
+      "expected_label": "Task4",
+      "matched": true,
+      "predictions": [
+        {
+          "class_id": 4,
+          "label": "Task4",
+          "confidence": 0.6289972066879272,
+          "xyxy": [
+            610.3215942382812,
+            588.9012451171875,
+            837.2237548828125,
+            938.0509643554688
+          ]
+        }
+      ],
+      "conflicting_task_labels": false,
+      "task_labels": [
+        "Task4"
+      ]
+    },
+    {
+      "image": "green_task_4_17.png",
+      "expected_class_id": 4,
+      "expected_label": "Task4",
+      "matched": true,
+      "predictions": [
+        {
+          "class_id": 4,
+          "label": "Task4",
+          "confidence": 0.8031280636787415,
+          "xyxy": [
+            732.3250732421875,
+            571.519775390625,
+            995.157958984375,
+            866.5177001953125
+          ]
+        }
+      ],
+      "conflicting_task_labels": false,
+      "task_labels": [
+        "Task4"
+      ]
+    },
+    {
+      "image": "green_task_4_18.png",
+      "expected_class_id": 4,
+      "expected_label": "Task4",
+      "matched": false,
+      "predictions": [],
+      "conflicting_task_labels": false,
+      "task_labels": []
+    },
+    {
+      "image": "green_task_4_19.png",
+      "expected_class_id": 4,
+      "expected_label": "Task4",
+      "matched": false,
+      "predictions": [],
+      "conflicting_task_labels": false,
+      "task_labels": []
+    },
+    {
+      "image": "green_task_4_20.png",
+      "expected_class_id": 4,
+      "expected_label": "Task4",
+      "matched": false,
+      "predictions": [],
+      "conflicting_task_labels": false,
+      "task_labels": []
+    },
+    {
+      "image": "red_task_1_1.png",
+      "expected_class_id": 0,
+      "expected_label": "NoTask",
+      "matched": false,
+      "predictions": [],
+      "conflicting_task_labels": false,
+      "task_labels": []
+    },
+    {
+      "image": "red_task_1_2.png",
+      "expected_class_id": 1,
+      "expected_label": "Task1",
+      "matched": true,
+      "predictions": [
+        {
+          "class_id": 1,
+          "label": "Task1",
+          "confidence": 0.914880096912384,
+          "xyxy": [
+            0.0,
+            555.5158081054688,
+            368.14447021484375,
+            968.032470703125
+          ]
+        }
+      ],
+      "conflicting_task_labels": false,
+      "task_labels": [
+        "Task1"
+      ]
+    },
+    {
+      "image": "red_task_1_3.png",
+      "expected_class_id": 0,
+      "expected_label": "NoTask",
+      "matched": true,
+      "predictions": [
+        {
+          "class_id": 0,
+          "label": "NoTask",
+          "confidence": 0.8395891785621643,
+          "xyxy": [
+            0.0,
+            448.06585693359375,
+            469.7748718261719,
+            1069.507080078125
+          ]
+        }
+      ],
+      "conflicting_task_labels": false,
+      "task_labels": []
+    },
+    {
+      "image": "red_task_1_4.png",
+      "expected_class_id": 0,
+      "expected_label": "NoTask",
+      "matched": true,
+      "predictions": [
+        {
+          "class_id": 0,
+          "label": "NoTask",
+          "confidence": 0.8328579068183899,
+          "xyxy": [
+            0.0,
+            445.9172058105469,
+            474.9624938964844,
+            1068.4248046875
+          ]
+        }
+      ],
+      "conflicting_task_labels": false,
+      "task_labels": []
+    },
+    {
+      "image": "red_task_1_5.png",
+      "expected_class_id": 0,
+      "expected_label": "NoTask",
+      "matched": true,
+      "predictions": [
+        {
+          "class_id": 0,
+          "label": "NoTask",
+          "confidence": 0.835681140422821,
+          "xyxy": [
+            0.5732574462890625,
+            463.51812744140625,
+            476.04144287109375,
+            1073.93115234375
+          ]
+        }
+      ],
+      "conflicting_task_labels": false,
+      "task_labels": []
+    },
+    {
+      "image": "red_task_1_6.png",
+      "expected_class_id": 0,
+      "expected_label": "NoTask",
+      "matched": true,
+      "predictions": [
+        {
+          "class_id": 0,
+          "label": "NoTask",
+          "confidence": 0.850445032119751,
+          "xyxy": [
+            0.0,
+            465.5034484863281,
+            553.0532836914062,
+            1066.487060546875
+          ]
+        }
+      ],
+      "conflicting_task_labels": false,
+      "task_labels": []
+    },
+    {
+      "image": "red_task_1_7.png",
+      "expected_class_id": 1,
+      "expected_label": "Task1",
+      "matched": true,
+      "predictions": [
+        {
+          "class_id": 1,
+          "label": "Task1",
+          "confidence": 0.8901327252388,
+          "xyxy": [
+            175.0524444580078,
+            543.7507934570312,
+            523.5233154296875,
+            948.6845092773438
+          ]
+        }
+      ],
+      "conflicting_task_labels": false,
+      "task_labels": [
+        "Task1"
+      ]
+    },
+    {
+      "image": "red_task_1_8.png",
+      "expected_class_id": 1,
+      "expected_label": "Task1",
+      "matched": true,
+      "predictions": [
+        {
+          "class_id": 1,
+          "label": "Task1",
+          "confidence": 0.9292179942131042,
+          "xyxy": [
+            0.0,
+            574.4315185546875,
+            345.95611572265625,
+            953.5164184570312
+          ]
+        }
+      ],
+      "conflicting_task_labels": false,
+      "task_labels": [
+        "Task1"
+      ]
+    },
+    {
+      "image": "red_task_1_9.png",
+      "expected_class_id": 0,
+      "expected_label": "NoTask",
+      "matched": true,
+      "predictions": [
+        {
+          "class_id": 0,
+          "label": "NoTask",
+          "confidence": 0.8322532773017883,
+          "xyxy": [
+            150.60145568847656,
+            449.29376220703125,
+            666.1481323242188,
+            1072.831787109375
+          ]
+        }
+      ],
+      "conflicting_task_labels": false,
+      "task_labels": []
+    },
+    {
+      "image": "red_task_1_10.png",
+      "expected_class_id": 0,
+      "expected_label": "NoTask",
+      "matched": true,
+      "predictions": [
+        {
+          "class_id": 0,
+          "label": "NoTask",
+          "confidence": 0.8594541549682617,
+          "xyxy": [
+            388.5205078125,
+            453.1614990234375,
+            825.8566284179688,
+            973.2485961914062
+          ]
+        }
+      ],
+      "conflicting_task_labels": false,
+      "task_labels": []
+    },
+    {
+      "image": "red_task_1_11.png",
+      "expected_class_id": 0,
+      "expected_label": "NoTask",
+      "matched": true,
+      "predictions": [
+        {
+          "class_id": 0,
+          "label": "NoTask",
+          "confidence": 0.8316856622695923,
+          "xyxy": [
+            527.4052124023438,
+            462.4567565917969,
+            988.6717529296875,
+            981.4973754882812
+          ]
+        }
+      ],
+      "conflicting_task_labels": false,
+      "task_labels": []
+    },
+    {
+      "image": "red_task_1_12.png",
+      "expected_class_id": 0,
+      "expected_label": "NoTask",
+      "matched": true,
+      "predictions": [
+        {
+          "class_id": 0,
+          "label": "NoTask",
+          "confidence": 0.6430873274803162,
+          "xyxy": [
+            1094.21044921875,
+            449.3001708984375,
+            1664.83154296875,
+            1080.0
+          ]
+        }
+      ],
+      "conflicting_task_labels": false,
+      "task_labels": []
+    },
+    {
+      "image": "red_task_1_13.png",
+      "expected_class_id": 0,
+      "expected_label": "NoTask",
+      "matched": false,
+      "predictions": [],
+      "conflicting_task_labels": false,
+      "task_labels": []
+    },
+    {
+      "image": "red_task_1_14.png",
+      "expected_class_id": 1,
+      "expected_label": "Task1",
+      "matched": true,
+      "predictions": [
+        {
+          "class_id": 1,
+          "label": "Task1",
+          "confidence": 0.8314138054847717,
+          "xyxy": [
+            1400.8795166015625,
+            553.581298828125,
+            1741.897705078125,
+            929.24560546875
+          ]
+        }
+      ],
+      "conflicting_task_labels": false,
+      "task_labels": [
+        "Task1"
+      ]
+    },
+    {
+      "image": "red_task_2_65.png",
+      "expected_class_id": 2,
+      "expected_label": "Task2",
+      "matched": true,
+      "predictions": [
+        {
+          "class_id": 2,
+          "label": "Task2",
+          "confidence": 0.9202549457550049,
+          "xyxy": [
+            866.1486206054688,
+            522.5116577148438,
+            1209.7857666015625,
+            882.1992797851562
+          ]
+        }
+      ],
+      "conflicting_task_labels": false,
+      "task_labels": [
+        "Task2"
+      ]
+    },
+    {
+      "image": "red_task_2_66.png",
+      "expected_class_id": 2,
+      "expected_label": "Task2",
+      "matched": true,
+      "predictions": [
+        {
+          "class_id": 2,
+          "label": "Task2",
+          "confidence": 0.8632519841194153,
+          "xyxy": [
+            828.7884521484375,
+            540.6685180664062,
+            1199.091064453125,
+            918.98876953125
+          ]
+        }
+      ],
+      "conflicting_task_labels": false,
+      "task_labels": [
+        "Task2"
+      ]
+    },
+    {
+      "image": "red_task_2_67.png",
+      "expected_class_id": 2,
+      "expected_label": "Task2",
+      "matched": true,
+      "predictions": [
+        {
+          "class_id": 2,
+          "label": "Task2",
+          "confidence": 0.8073569536209106,
+          "xyxy": [
+            773.1788330078125,
+            533.224365234375,
+            1155.14453125,
+            933.8302001953125
+          ]
+        }
+      ],
+      "conflicting_task_labels": false,
+      "task_labels": [
+        "Task2"
+      ]
+    },
+    {
+      "image": "red_task_2_68.png",
+      "expected_class_id": 2,
+      "expected_label": "Task2",
+      "matched": true,
+      "predictions": [
+        {
+          "class_id": 2,
+          "label": "Task2",
+          "confidence": 0.7525439262390137,
+          "xyxy": [
+            699.1644287109375,
+            544.078857421875,
+            1082.40966796875,
+            943.85888671875
+          ]
+        }
+      ],
+      "conflicting_task_labels": false,
+      "task_labels": [
+        "Task2"
+      ]
+    },
+    {
+      "image": "red_task_2_69.png",
+      "expected_class_id": 0,
+      "expected_label": "NoTask",
+      "matched": false,
+      "predictions": [],
+      "conflicting_task_labels": false,
+      "task_labels": []
+    },
+    {
+      "image": "red_task_2_70.png",
+      "expected_class_id": 0,
+      "expected_label": "NoTask",
+      "matched": true,
+      "predictions": [
+        {
+          "class_id": 0,
+          "label": "NoTask",
+          "confidence": 0.7421886324882507,
+          "xyxy": [
+            506.1140441894531,
+            465.9300842285156,
+            1088.03125,
+            1010.8048706054688
+          ]
+        }
+      ],
+      "conflicting_task_labels": false,
+      "task_labels": []
+    },
+    {
+      "image": "red_task_2_71.png",
+      "expected_class_id": 0,
+      "expected_label": "NoTask",
+      "matched": true,
+      "predictions": [
+        {
+          "class_id": 0,
+          "label": "NoTask",
+          "confidence": 0.8203218579292297,
+          "xyxy": [
+            456.6763916015625,
+            440.1896667480469,
+            1046.9439697265625,
+            1031.261962890625
+          ]
+        },
+        {
+          "class_id": 1,
+          "label": "Task1",
+          "confidence": 0.7560308575630188,
+          "xyxy": [
+            461.2289733886719,
+            549.772705078125,
+            683.9611206054688,
+            972.5703735351562
+          ]
+        }
+      ],
+      "conflicting_task_labels": false,
+      "task_labels": [
+        "Task1"
+      ]
+    },
+    {
+      "image": "red_task_2_72.png",
+      "expected_class_id": 0,
+      "expected_label": "NoTask",
+      "matched": true,
+      "predictions": [
+        {
+          "class_id": 0,
+          "label": "NoTask",
+          "confidence": 0.8685365915298462,
+          "xyxy": [
+            411.4201354980469,
+            450.67803955078125,
+            998.0641479492188,
+            1075.055908203125
+          ]
+        }
+      ],
+      "conflicting_task_labels": false,
+      "task_labels": []
+    },
+    {
+      "image": "red_task_3_9.png",
+      "expected_class_id": 3,
+      "expected_label": "Task3",
+      "matched": true,
+      "predictions": [
+        {
+          "class_id": 3,
+          "label": "Task3",
+          "confidence": 0.8430162668228149,
+          "xyxy": [
+            863.4318237304688,
+            521.9805908203125,
+            972.5277099609375,
+            716.2153930664062
+          ]
+        }
+      ],
+      "conflicting_task_labels": false,
+      "task_labels": [
+        "Task3"
+      ]
+    },
+    {
+      "image": "red_task_3_10.png",
+      "expected_class_id": 3,
+      "expected_label": "Task3",
+      "matched": true,
+      "predictions": [
+        {
+          "class_id": 3,
+          "label": "Task3",
+          "confidence": 0.8410056829452515,
+          "xyxy": [
+            863.3644409179688,
+            522.464599609375,
+            972.10693359375,
+            716.2962036132812
+          ]
+        }
+      ],
+      "conflicting_task_labels": false,
+      "task_labels": [
+        "Task3"
+      ]
+    },
+    {
+      "image": "red_task_3_11.png",
+      "expected_class_id": 3,
+      "expected_label": "Task3",
+      "matched": true,
+      "predictions": [
+        {
+          "class_id": 3,
+          "label": "Task3",
+          "confidence": 0.8395291566848755,
+          "xyxy": [
+            862.5303955078125,
+            521.4398803710938,
+            972.4288330078125,
+            716.3558349609375
+          ]
+        }
+      ],
+      "conflicting_task_labels": false,
+      "task_labels": [
+        "Task3"
+      ]
+    },
+    {
+      "image": "red_task_3_12.png",
+      "expected_class_id": 3,
+      "expected_label": "Task3",
+      "matched": true,
+      "predictions": [
+        {
+          "class_id": 3,
+          "label": "Task3",
+          "confidence": 0.8397077918052673,
+          "xyxy": [
+            862.4371948242188,
+            521.3047485351562,
+            972.7029418945312,
+            716.5654907226562
+          ]
+        }
+      ],
+      "conflicting_task_labels": false,
+      "task_labels": [
+        "Task3"
+      ]
+    },
+    {
+      "image": "red_task_3_13.png",
+      "expected_class_id": 3,
+      "expected_label": "Task3",
+      "matched": true,
+      "predictions": [
+        {
+          "class_id": 3,
+          "label": "Task3",
+          "confidence": 0.8455833196640015,
+          "xyxy": [
+            861.1818237304688,
+            521.2958374023438,
+            970.1167602539062,
+            715.740478515625
+          ]
+        }
+      ],
+      "conflicting_task_labels": false,
+      "task_labels": [
+        "Task3"
+      ]
+    },
+    {
+      "image": "red_task_3_14.png",
+      "expected_class_id": 3,
+      "expected_label": "Task3",
+      "matched": true,
+      "predictions": [
+        {
+          "class_id": 3,
+          "label": "Task3",
+          "confidence": 0.8177944421768188,
+          "xyxy": [
+            862.427490234375,
+            520.8369140625,
+            963.1680908203125,
+            715.475830078125
+          ]
+        }
+      ],
+      "conflicting_task_labels": false,
+      "task_labels": [
+        "Task3"
+      ]
+    },
+    {
+      "image": "red_task_3_15.png",
+      "expected_class_id": 0,
+      "expected_label": "NoTask",
+      "matched": true,
+      "predictions": [
+        {
+          "class_id": 0,
+          "label": "NoTask",
+          "confidence": 0.8088884353637695,
+          "xyxy": [
+            864.4808959960938,
+            480.81463623046875,
+            1144.8704833984375,
+            770.94140625
+          ]
+        }
+      ],
+      "conflicting_task_labels": false,
+      "task_labels": []
+    },
+    {
+      "image": "red_task_4_66.png",
+      "expected_class_id": 0,
+      "expected_label": "NoTask",
+      "matched": true,
+      "predictions": [
+        {
+          "class_id": 0,
+          "label": "NoTask",
+          "confidence": 0.8274646997451782,
+          "xyxy": [
+            1063.2696533203125,
+            554.0585327148438,
+            1285.399658203125,
+            796.9473876953125
+          ]
+        }
+      ],
+      "conflicting_task_labels": false,
+      "task_labels": []
+    },
+    {
+      "image": "red_task_4_67.png",
+      "expected_class_id": 0,
+      "expected_label": "NoTask",
+      "matched": true,
+      "predictions": [
+        {
+          "class_id": 0,
+          "label": "NoTask",
+          "confidence": 0.864530086517334,
+          "xyxy": [
+            1056.4075927734375,
+            553.09716796875,
+            1288.35498046875,
+            797.3596801757812
+          ]
+        }
+      ],
+      "conflicting_task_labels": false,
+      "task_labels": []
+    },
+    {
+      "image": "red_task_4_68.png",
+      "expected_class_id": 0,
+      "expected_label": "NoTask",
+      "matched": true,
+      "predictions": [
+        {
+          "class_id": 0,
+          "label": "NoTask",
+          "confidence": 0.8628526329994202,
+          "xyxy": [
+            1016.1524658203125,
+            556.513427734375,
+            1241.4593505859375,
+            797.500732421875
+          ]
+        }
+      ],
+      "conflicting_task_labels": false,
+      "task_labels": []
+    },
+    {
+      "image": "red_task_4_69.png",
+      "expected_class_id": 0,
+      "expected_label": "NoTask",
+      "matched": true,
+      "predictions": [
+        {
+          "class_id": 0,
+          "label": "NoTask",
+          "confidence": 0.8625536561012268,
+          "xyxy": [
+            960.8252563476562,
+            559.6666870117188,
+            1175.996337890625,
+            816.1221923828125
+          ]
+        }
+      ],
+      "conflicting_task_labels": false,
+      "task_labels": []
+    },
+    {
+      "image": "red_task_4_70.png",
+      "expected_class_id": 0,
+      "expected_label": "NoTask",
+      "matched": true,
+      "predictions": [
+        {
+          "class_id": 0,
+          "label": "NoTask",
+          "confidence": 0.8754814267158508,
+          "xyxy": [
+            820.071533203125,
+            570.3256225585938,
+            1061.72314453125,
+            849.2269287109375
+          ]
+        }
+      ],
+      "conflicting_task_labels": false,
+      "task_labels": []
+    },
+    {
+      "image": "red_task_4_71.png",
+      "expected_class_id": 0,
+      "expected_label": "NoTask",
+      "matched": true,
+      "predictions": [
+        {
+          "class_id": 0,
+          "label": "NoTask",
+          "confidence": 0.864874005317688,
+          "xyxy": [
+            659.6727905273438,
+            579.2735595703125,
+            942.6915893554688,
+            897.7761840820312
+          ]
+        }
+      ],
+      "conflicting_task_labels": false,
+      "task_labels": []
+    },
+    {
+      "image": "red_task_4_72.png",
+      "expected_class_id": 0,
+      "expected_label": "NoTask",
+      "matched": true,
+      "predictions": [
+        {
+          "class_id": 0,
+          "label": "NoTask",
+          "confidence": 0.8343403339385986,
+          "xyxy": [
+            536.5650024414062,
+            572.898193359375,
+            812.6017456054688,
+            904.8806762695312
+          ]
+        }
+      ],
+      "conflicting_task_labels": false,
+      "task_labels": []
+    },
+    {
+      "image": "red_task_4_73.png",
+      "expected_class_id": 0,
+      "expected_label": "NoTask",
+      "matched": true,
+      "predictions": [
+        {
+          "class_id": 0,
+          "label": "NoTask",
+          "confidence": 0.8726653456687927,
+          "xyxy": [
+            536.6204223632812,
+            572.4917602539062,
+            867.3931884765625,
+            914.0951538085938
+          ]
+        }
+      ],
+      "conflicting_task_labels": false,
+      "task_labels": []
+    },
+    {
+      "image": "red_task_4_74.png",
+      "expected_class_id": 4,
+      "expected_label": "Task4",
+      "matched": true,
+      "predictions": [
+        {
+          "class_id": 4,
+          "label": "Task4",
+          "confidence": 0.8178581595420837,
+          "xyxy": [
+            1081.0726318359375,
+            603.8119506835938,
+            1356.85986328125,
+            889.2634887695312
+          ]
+        }
+      ],
+      "conflicting_task_labels": false,
+      "task_labels": [
+        "Task4"
+      ]
+    },
+    {
+      "image": "red_task_4_75.png",
+      "expected_class_id": 4,
+      "expected_label": "Task4",
+      "matched": true,
+      "predictions": [
+        {
+          "class_id": 4,
+          "label": "Task4",
+          "confidence": 0.8293134570121765,
+          "xyxy": [
+            1229.9761962890625,
+            603.9877319335938,
+            1534.7191162109375,
+            915.2066040039062
+          ]
+        }
+      ],
+      "conflicting_task_labels": false,
+      "task_labels": [
+        "Task4"
+      ]
+    },
+    {
+      "image": "red_task_4_76.png",
+      "expected_class_id": 4,
+      "expected_label": "Task4",
+      "matched": true,
+      "predictions": [
+        {
+          "class_id": 4,
+          "label": "Task4",
+          "confidence": 0.7619439959526062,
+          "xyxy": [
+            1370.5531005859375,
+            608.348388671875,
+            1613.9176025390625,
+            927.7852172851562
+          ]
+        }
+      ],
+      "conflicting_task_labels": false,
+      "task_labels": [
+        "Task4"
+      ]
+    }
+  ]
+}
